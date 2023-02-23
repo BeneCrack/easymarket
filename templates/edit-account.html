@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Account Overview{% endblock %}
+{% block content %}
+        <div class="mx-auto lg:ml-80">
+      <section>
+        <div class="px-8 pt-8 pb-2 bg-gray-600">
+          <div class="pb-6 border-b-2 border-gray-500">
+            <div class="flex flex-wrap justify-between -mx-4">
+              <div class="w-full lg:w-auto px-4 mb-5 lg:mb-0">
+                <h4 class="text-2xl font-bold text-white tracking-wide leading-6 mb-1">Edit Account</h4>
+                <p class="text-xs leading-5 text-gray-300">Create an API Key on your exchange and connect it to Trizzle</p>
+              </div>
+              <div class="w-full lg:w-auto px-4">
+                <div class="flex flex-wrap items-center">
+      
+      </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <section class="py-3"><div class="container px-4 mx-auto">
+          <div class="pt-6 pb-8 rounded-xl">
+      
+            <div class="max-w-sm mx-auto mb-10 text-center">
+              
+              
+            </div>
+            <form action="/edit/account/{{ account.id }}" method="post">
+              <div class="relative w-full h-14 py-4 px-3 mb-10 border border-gray-400 focus-within:border-green-500 rounded-lg">
+                <span class="absolute bottom-full mb-10 left-0 ml-3 -mb-1 transform translate-y-0.5 text-xs font-semibold text-gray-300 px-1 bg-gray-500">Name</span>
+                <input class="block w-full outline-none bg-transparent text-sm text-gray-100 font-medium" id="modalInput7-1" type="text" name="name" value="{{ account.name }}"></div>
+              <div class="relative mb-9 block px-3 w-full font-medium border border-gray-400 hover:border-white focus-within:border-green-500 rounded-lg">
+                <span class="absolute bottom-full left-0 ml-3 -mb-1 transform translate-y-0.5 text-xs font-semibold text-gray-300 px-1 bg-gray-500">Exchange</span>
+                <span class="absolute top-1/2 right-0 mr-5 transform -translate-y-1/2">
+                  <svg width="12" height="8" viewbox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.9999 1.16994C10.8126 0.983692 10.5591 0.87915 10.2949 0.87915C10.0308 0.87915 9.77731 0.983692 9.58995 1.16994L5.99995 4.70994L2.45995 1.16994C2.27259 0.983692 2.01913 0.87915 1.75495 0.87915C1.49076 0.87915 1.23731 0.983692 1.04995 1.16994C0.95622 1.26291 0.881826 1.37351 0.831057 1.49537C0.780288 1.61723 0.75415 1.74793 0.75415 1.87994C0.75415 2.01195 0.780288 2.14266 0.831057 2.26452C0.881826 2.38638 0.95622 2.49698 1.04995 2.58994L5.28995 6.82994C5.38291 6.92367 5.49351 6.99807 5.61537 7.04883C5.73723 7.0996 5.86794 7.12574 5.99995 7.12574C6.13196 7.12574 6.26267 7.0996 6.38453 7.04883C6.50638 6.99807 6.61699 6.92367 6.70995 6.82994L10.9999 2.58994C11.0937 2.49698 11.1681 2.38638 11.2188 2.26452C11.2696 2.14266 11.2957 2.01195 11.2957 1.87994C11.2957 1.74793 11.2696 1.61723 11.2188 1.49537C11.1681 1.37351 11.0937 1.26291 10.9999 1.16994Z" fill="#3D485B"></path></svg></span>
+                <select class="w-full py-4 text-gray-50 font-semibold appearance-none bg-transparent outline-none" id="formInput2-9" name="exchange_id">
+                    {% for exchange in exchanges %}
+                    <option class="bg-gray-500" value="{{ exchange.id }}" {% if exchange.id == account.exchange_id %} selected {% endif %} >
+                        {{ exchange.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+              </div>
+              <div class="relative w-full h-14 py-4 px-3 mb-10 border border-gray-400 focus-within:border-green-500 rounded-lg">
+                <span class="absolute bottom-full left-0 ml-3 -mb-1 transform translate-y-0.5 text-xs font-semibold text-gray-300 px-1 bg-gray-500">API Key</span>
+                <input class="block w-full outline-none bg-transparent text-sm text-gray-100 font-medium" id="api_key" type="text" name="api_key" value="{{ account.api_key }}"></div>
+              <div class="relative w-full h-14 py-4 px-3 mb-6 border border-gray-400 focus-within:border-green-500 rounded-lg">
+                <span class="absolute bottom-full left-0 ml-3 -mb-1 transform translate-y-0.5 text-xs font-semibold text-gray-300 px-1 bg-gray-500" >API Secret</span>
+                <input class="block w-full outline-none bg-transparent text-sm text-gray-100 font-medium" id="api_secret" type="text" name="api_secret" value="{{ account.api_secret }}"></div>
+              <div class="relative w-full h-14 py-4 px-3 mb-6 border border-gray-400 focus-within:border-green-500 rounded-lg">
+                <span class="absolute bottom-full left-0 ml-3 -mb-1 transform translate-y-0.5 text-xs font-semibold text-gray-300 px-1 bg-gray-500">Password</span>
+                <input class="block w-full outline-none bg-transparent text-sm text-gray-100 font-medium" id="password" type="password" name="password" value="{{ account.password }}"></div>
+              <button class="block w-full h-12 py-2 px-6 text-center text-blue-50 font-semibold leading-6 bg-blue-500 hover:bg-blue-600 rounded-lg transition duration-200">Save</button>
+            </form>
+          </div>
+        </div>
+      </section>
+      </div>
+{% endblock %}
+

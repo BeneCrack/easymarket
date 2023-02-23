@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>All Users</title>
+</head>
+<body>
+    <h1>All Users</h1>
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Short</th>
+        </tr>
+        {% for exchange in exchanges %}
+        <tr>
+            <td>{{ exchange.id }}</td>
+            <td>{{ exchange.name }}</td>
+            <td>{{ exchange.short }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

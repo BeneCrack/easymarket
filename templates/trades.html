@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+{% block title %}Trades{% endblock %}
+{% block content %}
+
+        <div class="mx-auto lg:ml-80">
+          <section class="py-3">
+            <div class="container px-4 mx-auto">
+              <div class="pt-6 pb-8 bg-gray-500 rounded-xl">
+                <div class="px-6">
+                  <div class="pb-6 border-b-2 border-gray-500">
+                    <div class="flex justify-between -mx-4">
+                      <div class="px-4">
+                        <h4
+                          class="text-2xl font-bold text-white tracking-wide leading-6 mb-1"
+                        >
+                          Trades
+                        </h4>
+                        <p class="text-xs leading-5 text-gray-300">
+                          Lorem ipsum dolor sit amet consectutar domor at elis
+                        </p>
+                      </div>
+                      <div class="px-4">
+                        <a
+                          class="inline-block text-gray-400 hover:text-gray-300"
+                          href="#"
+                        >
+                          <svg
+                            width="4"
+                            height="18"
+                            viewbox="0 0 4 18"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d="M2 4C2.39556 4 2.78224 3.8827 3.11114 3.66294C3.44004 3.44318 3.69639 3.13082 3.84776 2.76537C3.99914 2.39992 4.03874 1.99778 3.96157 1.60982C3.8844 1.22186 3.69392 0.865492 3.41421 0.585787C3.13451 0.306082 2.77814 0.115601 2.39018 0.0384303C2.00222 -0.0387401 1.60009 0.000866562 1.23463 0.152242C0.869182 0.303617 0.556825 0.559962 0.337062 0.88886C0.117299 1.21776 1.07779e-06 1.60444 1.07779e-06 2C1.07779e-06 2.53043 0.210715 3.03914 0.585788 3.41421C0.960861 3.78929 1.46957 4 2 4ZM2 14C1.60444 14 1.21776 14.1173 0.888861 14.3371C0.559963 14.5568 0.303617 14.8692 0.152242 15.2346C0.000866562 15.6001 -0.0387401 16.0022 0.0384303 16.3902C0.115601 16.7781 0.306083 17.1345 0.585788 17.4142C0.865493 17.6939 1.22186 17.8844 1.60982 17.9616C1.99778 18.0387 2.39992 17.9991 2.76537 17.8478C3.13082 17.6964 3.44318 17.44 3.66294 17.1111C3.8827 16.7822 4 16.3956 4 16C4 15.4696 3.78929 14.9609 3.41421 14.5858C3.03914 14.2107 2.53043 14 2 14ZM2 7C1.60444 7 1.21776 7.1173 0.888861 7.33706C0.559963 7.55682 0.303617 7.86918 0.152242 8.23463C0.000866562 8.60009 -0.0387401 9.00222 0.0384303 9.39018C0.115601 9.77814 0.306083 10.1345 0.585788 10.4142C0.865493 10.6939 1.22186 10.8844 1.60982 10.9616C1.99778 11.0387 2.39992 10.9991 2.76537 10.8478C3.13082 10.6964 3.44318 10.44 3.66294 10.1111C3.8827 9.78224 4 9.39556 4 9C4 8.46957 3.78929 7.96086 3.41421 7.58579C3.03914 7.21071 2.53043 7 2 7Z"
+                              fill="currentColor"
+                            ></path></svg
+                        ></a>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="w-full mt-6 pb-6 overflow-x-auto">
+                    <table class="w-full min-w-max">
+                      <thead>
+                        <tr class="text-left">
+                          <th class="p-0">
+                            <div class="py-3 px-6 rounded-l-xl bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Trade ID</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Bot</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Exchange</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Position</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >PNL</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Type</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Entered</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div class="py-3 px-6 rounded-r-xl bg-gray-600">
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Open/Closed</span
+                              >
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >12342545</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >Tradingview-Keltner</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span
+                                class="inline-block px-2 py-1 text-xs text-gray-300 font-medium bg-gray-700 rounded-full"
+                                >kucoinfutures</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >100 USDT</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >+ 36.36% ▲</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span
+                                class="inline-block w-2 h-2 mr-1 bg-green-500 rounded-full"
+                              ></span>
+                              <span class="text-sm font-medium text-gray-100"
+                                >Long</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >June 06, 2022</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >Closed</span
+                              >
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 rounded-l-xl bg-gray-600"
+                            >
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >6278254</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >Tradingview-RSI</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span
+                                class="inline-block px-2 py-1 text-xs text-gray-300 font-medium bg-gray-700 rounded-full"
+                                >binancefutures</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >1000 USDT</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >+ 21.34% ▲</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span
+                                class="inline-block w-2 h-2 mr-1 rounded-full bg-red-500"
+                              ></span>
+                              <span class="text-sm font-medium text-gray-100"
+                                >Short</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >June 06, 2022</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 rounded-r-xl bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >Open</span
+                              >
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >12342545</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >Tradingview-Keltner</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span
+                                class="inline-block px-2 py-1 text-xs text-gray-300 font-medium bg-gray-700 rounded-full"
+                                >kucoinfutures</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >100 USDT</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >+ 36.36% ▲</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span
+                                class="inline-block w-2 h-2 mr-1 bg-green-500 rounded-full"
+                              ></span>
+                              <span class="text-sm font-medium text-gray-100"
+                                >Long</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >June 06, 2022</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm text-gray-100 font-medium"
+                                >Closed</span
+                              >
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 rounded-l-xl bg-gray-600"
+                            >
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >6278254</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <div class="flex items-center">
+                                <span class="text-sm text-gray-100 font-medium"
+                                  >Tradingview-RSI</span
+                                >
+                              </div>
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span
+                                class="inline-block px-2 py-1 text-xs text-gray-300 font-medium bg-gray-700 rounded-full"
+                                >binancefutures</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >1000 USDT</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >+ 21.34% ▲</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span
+                                class="inline-block w-2 h-2 mr-1 rounded-full bg-red-500"
+                              ></span>
+                              <span class="text-sm font-medium text-gray-100"
+                                >Short</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >June 06, 2022</span
+                              >
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div
+                              class="flex items-center h-16 px-6 rounded-r-xl bg-gray-600"
+                            >
+                              <span class="text-sm text-gray-100 font-medium"
+                                >Open</span
+                              >
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div
+                  class="flex flex-wrap items-center justify-between px-6 pt-8 border-t border-gray-400"
+                >
+                  <div class="w-full sm:w-auto mb-6 sm:mb-0">
+                    <div class="flex items-center justify-between">
+                      <p class="text-sm font-medium text-gray-400">
+                        <span>Showing</span>
+                        <span class="px-px text-gray-200">1</span>
+                        <span>to</span>
+                        <span class="px-px text-gray-200">10</span>
+                        <span>of 20 results</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div class="w-full sm:w-auto mb-6 sm:mb-0">
+                    <div class="flex flex-wrap items-center -m-1.5">
+                      <div class="w-auto p-1.5">
+                        <a
+                          class="inline-flex items-center h-9 py-1 px-4 text-xs text-gray-400 font-semibold bg-gray-600 hover:bg-gray-700 rounded-lg transition duration-200"
+                          href="#"
+                          >Previous</a
+                        >
+                      </div>
+                      <div class="w-auto p-1.5">
+                        <a
+                          class="inline-flex items-center h-9 py-1 px-4 text-xs text-blue-50 font-semibold bg-blue-500 hover:bg-blue-600 rounded-lg transition duration-200"
+                          href="#"
+                          >Next</a
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+{% endblock %}
