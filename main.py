@@ -1,13 +1,23 @@
+import json
+from datetime import datetime
 import ccxt
 from flask import Markup, flash, request, Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
 from flask_sqlalchemy import SQLAlchemy
-from pprint import pprint
-from classes.exchange import Exchange
+from classes.exchange2 import Exchange
 from classes.models import ExchangeModel, Bots, Accounts, Signals, Positions, Role, User
 
 app = Flask(__name__)
+
+# Load configuration from environment variable
+app.config.from_envvar('APP_CONFIG')
+
+# Create an exchange client
+exchange = Exchange(app.config['EXCHANGE_NAME'], app.config['API_KEY'], app.config['API_SECRET'])
+
+
+app.config.from_envvar('APP_CONFIG')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///easymarket.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'super-secret-key'
@@ -350,271 +360,131 @@ def reload_account():
 ########################### TRADINGVIEW WEBHOOK #################################
 #################################################################################
 
-
-@app.route('/webhooks/tradingview', methods=['POST'])
-def tradingview_webhook():
-    # Parse the TradingView signal
-    # Signal EXAMPLE = "ENTER-LONG_KUCOIN_BTC-USDT_BOTNAME1_1H_744bde7b7594b117"
-    signal = request.form['message']
-    signal_parts = signal.split('_')
-    if len(signal_parts) < 4:
-        return 'Invalid signal format', 400
-    signal_type = signal_parts[0]
-    exchange_name = signal_parts[1].lower()
-    bot_name = signal_parts[2]
-    timeframe = signal_parts[3]
-
-    # Determine exchange
-    exchanges = {
-        'binance': ccxt.binance,
-        'binancefutures': ccxt.binance,
-        'kucoin': ccxt.kucoin,
-        'kucoinfutures': ccxt.kucoin,
-        'bybit': ccxt.bybit,
-        'bitmex': ccxt.bitmex,
-        'coinbase': ccxt.coinbasepro,
-        'coinbasepro': ccxt.coinbasepro,
-        'ftx': ccxt.ftx,
-        'ftxus': ccxt.ftx,
-        'deribit': ccxt.deribit
-    }
-    if exchange_name not in exchanges:
-        return 'Unsupported exchange', 400
-    exchange = exchanges[exchange_name]({'enableRateLimit': True})
-
-    # Check if bot exists and is enabled
-    bot = Bots.query.filter_by(name=bot_name, exchange=exchange_name, enabled=True).first()
-    if not bot:
-        app.logger.error(f"Bot '{bot_name}' not found or is disabled.")
-        return "Bot not found or disabled.", 404
-
-    # Set API keys and symbol
-    exchange.apiKey = bot.api_key
-    exchange.secret = bot.secret_key
-    symbol = bot.symbol
-
-    # Determine order side and type
-    if signal_type == 'ENTER-LONG':
-        side = 'buy'
-        order_type = 'limit'
-    elif signal_type == 'ENTER-SHORT':
-        side = 'sell'
-        order_type = 'limit'
-    elif signal_type == 'EXIT-LONG':
-        side = 'sell'
-        order_type = 'market'
-    elif signal_type == 'EXIT-SHORT':
-        side = 'buy'
-        order_type = 'market'
-    else:
-        return 'Invalid signal type', 400
-
-    # Determine time interval from signal timeframe
-    interval_map = {
-        '1m': '1m',
-        '5m': '5m',
-        '15m': '15m',
-        '30m': '30m',
-        '1h': '1h',
-        '2h': '2h',
-        '3h': '3h',
-        '4h': '4h',
-        '6h': '6h',
-        '12h': '12h',
-        '1d': '1d',
-        '1w': '1w',
-        '1M': '1M'
-    }
-    time_frame = signal_parts[3]
-    interval = interval_map.get(time_frame)
-
-    if not interval:
-        app.logger.error(f"Invalid signal timeframe: {time_frame}")
-        return "Invalid signal timeframe.", 400
-
-    app.logger.info(f"Received signal: {signal}")
-
-    # Check if bot exists and is enabled
+# Get bot configuration from the database
+def get_bot_config(bot_name):
     bot = Bots.query.filter_by(name=bot_name).first()
+    if not bot:
+        return None
+    return {
+        'bot_type': bot.type,
+        'amount': bot.amount
+    }
 
-    if bot is None:
-        app.logger.error(f"Bot '{bot_name}' not found in database.")
-        return "Bot not found.", 404
+# Get the exchange client for the bot
+def get_exchange_client(bot_name):
+    bot_config = get_bot_config(bot_name)
+    if not bot_config:
+        return None
+    exchange.set_testnet(bot_config['bot_type'] == 'testnet')
+    return exchange
 
-    if not bot.enabled:
-        app.logger.warning(f"Bot '{bot_name}' is not enabled.")
-        return "Bot not enabled.", 400
+# Get the current position for the bot
+def get_position(bot_name):
+    return Positions.query.filter_by(bot_name=bot_name).first()
 
-    # Get account
-    account_name = bot.account.name if bot.account else None
-    account = Accounts.query.filter_by(name=account_name).first() if account_name else None
+# Calculate the order amount based on the bot's configured amount
+def calculate_order_amount(bot_config, position):
+    if not bot_config or not position:
+        return None
+    return int(bot_config['amount'] * position.capital / 100)
 
-    if account is None:
-        app.logger.error(f"Account for bot '{bot_name}' not found in database.")
-        return "Account not found.", 404
-
-    # Get open orders
-    orders = get_open_orders(exchange, bot.pair, account.api_key, account.api_secret, account.password)
-
-    # Determine order side and type from signal type
-    if signal_type == 'ENTER-LONG':
-        side = 'buy'
-        order_type = 'limit'
-        close_signal_type = 'EXIT-LONG'
-    elif signal_type == 'ENTER-SHORT':
-        side = 'sell'
-        order_type = 'limit'
-        close_signal_type = 'EXIT-SHORT'
-    elif signal_type == 'EXIT-LONG':
-        side = 'sell'
-        order_type = 'market'
-        close_signal_type = 'ENTER-SHORT'
-    elif signal_type == 'EXIT-SHORT':
-        side = 'buy'
-        order_type = 'market'
-        close_signal_type = 'ENTER-LONG'
-    else:
-        app.logger.error(f"Invalid signal type: {signal_type}")
-        return "Invalid signal type.", 400
-
-    # Determine order amount from bot amount and balance
-    balance = get_balance(exchange, bot.pair, account.api_key, account.api_secret, account.password)
-    order_amount = balance['free'] * bot.amount
-
-    # Check if there are existing orders for the same bot and symbol
-    existing_orders = [o for o in orders if o['info']['bot'] == bot_name and o['symbol'] == bot.pair]
-
-    if existing_orders:
-        # Cancel existing orders if there are any
-        for order in existing_orders:
-            cancel_order(exchange, order['id'], bot.pair, account.api_key, account.api_secret, account.password)
-
-    # Place new order
-    order = create_order(exchange, bot.pair, order_type, side, order_amount, account.api_key, account.api_secret, account.password)
-
-    # Save bot position
-    bot.position = order['id']
-    db.session.commit()
-
-    # Placing the order
+# TradingView webhook route
+@app.route('/webhook/tradingview', methods=['POST'])
+def tradingview_webhook():
     try:
-        order = exchange.create_order(symbol=symbol, type='limit', side=side, amount=order_amount, price=price)
-        app.logger.info(f"Placed {signal_type} order on {exchange.id} for bot '{bot_name}'. Order details: {order}")
-    except Exception as e:
-        app.logger.error(f"Failed to place {signal_type} order for bot '{bot_name}' on {exchange.id}. Error: {e}")
-        return "Failed to place order.", 500
-    if existing_orders:
-        # Cancel existing orders if there are any
-        for order in existing_orders:
-            cancel_order(exchange, order['id'], bot.pair, account.api_key, account.api_secret, account.password)
-            app.logger.info(f"Canceled existing order: {order['id']}")
-
-    # Place order
-    order = create_order(exchange, symbol, side, order_type, order_amount, bot.take_profit, bot.stop_loss, bot.trailing_stop, bot.trailing_stop_distance, bot.leverage, bot.post_only)
-    if not order:
-        app.logger.error(f"Failed to place order for bot '{bot_name}'.")
-        return "Failed to place order.", 500
-
-    app.logger.info(f"Placed {side} order for bot '{bot_name}' and symbol '{bot.symbol}'.")
-    app.logger.debug(f"Order: {order}")
-
-    # Save order to database
-    db_order = Positions(
-        bot_id=bot.id,
-        exchange=exchange_name,
-        symbol=symbol,
-        order_id=order['id'],
-        order_type=order_type,
-        side=side,
-        amount=order_amount,
-        price=order['price'],
-        status='open',
-        take_profit=bot.take_profit,
-        stop_loss=bot.stop_loss,
-        trailing_stop=bot.trailing_stop,
-        trailing_stop_distance=bot.trailing_stop_distance,
-        leverage=bot.leverage,
-        post_only=bot.post_only
-    )
-    db.session.add(db_order)
-    db.session.commit()
-
-    return 'OK', 200
-
-
-def cancel_order(exchange, order_id, symbol, api_key, secret_key, password=None):
-    try:
-        exchange.cancel_order(order_id, symbol, api_key=api_key, secret=secret_key, password=password)
-        return True
-    except Exception as e:
-        app.logger.error(f"Failed to cancel order {order_id}: {e}")
-        return False
-
-
-def create_order(exchange, symbol, side, order_type, amount, take_profit=None, stop_loss=None, trailing_stop=None, trailing_stop_distance=None, leverage=None, post_only=False):
-    if side == 'buy':
-        if order_type == 'limit':
-            price = exchange.fetch_order_book(symbol)['asks'][0][0]
-            if post_only:
-                order = exchange.create_limit_buy_order(symbol, amount, price, {'postOnly': True})
+        data = json.loads(request.data)
+        signal = data['message']
+        bot_name = signal.split('_')[-1]
+        bot_config = get_bot_config(bot_name)
+        if not bot_config:
+            return jsonify({'error': f'Bot "{bot_name}" not found'}), 404
+        exchange_client = get_exchange_client(bot_name)
+        if not exchange_client:
+            return jsonify({'error': 'Invalid bot configuration'}), 400
+        position = get_position(bot_name)
+        if not position:
+            return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+        order_amount = calculate_order_amount(bot_config, position)
+        if not order_amount:
+            return jsonify({'error': 'Unable to calculate order amount'}), 400
+        if signal.startswith('ENTER-LONG'):
+            if bot_config['bot_type'] == 'testnet':
+                order = exchange_client.create_testnet_order('BUY', 'LIMIT', 'BTC/USDT', order_amount, 50000)
             else:
-                order = exchange.create_limit_buy_order(symbol, amount, price)
-        elif order_type == 'market':
-            if post_only:
-                app.logger.error(f"Cannot set post_only to True for market buy order.")
-                return None
-            else:
-                order = exchange.create_market_buy_order(symbol, amount)
-            elif side == 'sell':
-                if order_type == 'limit':
-                    price = exchange.fetch_order_book(symbol)['bids'][0][0]
-                    if post_only:
-                        order = exchange.create_limit_sell_order(symbol, amount, price, {'postOnly': True})
+                order = exchange_client.create_order('BUY', 'LIMIT', 'BTC/USDT', order_amount, 50000)
+            if not order:
+                return jsonify({'error': 'Unable to create order'}), 500
+            Positions.update_position(bot_name, order['id'], 'long', order_amount, order['price'], datetime.now())
+            return jsonify({'message': 'Long position created successfully'}), 200
+        elif signal.startswith('EXIT-LONG'):
+            position = get_position(bot_name)
+            if not position:
+                return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+            order = exchange_client.get_order(position.exchange_order_id)
+            if not order:
+                return jsonify({'error': 'Unable to get order details'}), 500
+            if order['status'] == 'FILLED':
+                if bot_config['bot_type'] == 'testnet':
+                    close_order = exchange_client.create_testnet_order('SELL', 'LIMIT', 'BTC/USDT', order_amount, 50000)
+                else:
+                    # Create real order
+                    if order_type == 'LIMIT':
+                        price = float(order_parts[3])
+                    order = exchange_client.create_order(
+                        symbol=symbol,
+                        side=side,
+                        type=order_type,
+                        timeInForce='GTC',
+                        quantity=quantity,
+                        price=price
+                    )
                     else:
-                        order = exchange.create_limit_sell_order(symbol, amount, price)
-                elif order_type == 'market':
-                        if post_only:
-                            app.logger.error(f"Cannot set post_only to True for market sell order.")
-                            return None
-                        else:
-                            order = exchange.create_market_sell_order(symbol, amount)
-                            if order and take_profit:
-                                take_profit_price = calculate_take_profit_price(side=side, entry_price=entry_price,
-                                                                                take_profit=take_profit)
-                                try:
-                                    tp_order = exchange.create_order(
-                                        symbol=symbol,
-                                        side='SELL' if side == 'BUY' else 'BUY',
-                                        type='LIMIT',
-                                        timeInForce='GTC',
-                                        quantity=amount,
-                                        price=take_profit_price,
-                                        stopPrice=take_profit_price,
-                                        newOrderRespType='FULL'
-                                    )
-                                    print(f"Take Profit order created: {tp_order}")
-                                except Exception as e:
-                                    print(f"Error creating Take Profit order: {e}")
+                    order = exchange_client.create_order(
+                        symbol=symbol,
+                        side=side,
+                        type=order_type,
+                        timeInForce='GTC',
+                        quantity=quantity,
+                    )
 
+                    # Update positions table with order details
+                    if side == 'BUY':
+                        position_entry = Position(
+                            bot_id=bot_id,
+                            symbol=symbol,
+                            order_type=order_type,
+                            order_id=order['orderId'],
+                            open_time=order['transactTime'],
+                            order_price=order['price'],
+                            order_quantity=order['origQty'],
+                            stop_loss=None,
+                            take_profit=None,
+                            status='OPEN'
+                        )
+                    db.session.add(position_entry)
+                    else:
+                    position = Position.query.filter_by(
+                        bot_id=bot_id,
+                        symbol=symbol,
+                        status='OPEN'
+                    ).first()
+                    if position:
+                        position.order_type = order_type
+                    position.order_id = order['orderId']
+                    position.open_time = order['transactTime']
+                    position.order_price = order['price']
+                    position.order_quantity = order['origQty']
+                    else:
+                    raise ValueError('Could not update position table: Position not found')
 
-def get_open_orders(exchange, pair, api_key, api_secret, password):
-    exchange = getattr(ccxt, exchange)({
-        'apiKey': api_key,
-        'secret': api_secret,
-        'password': password,
-    })
-    orders = exchange.fetch_open_orders(pair)
-    return orders
+                    db.session.commit()
 
+                    return 'Order created successfully'
 
-def get_balance(exchange, pair, api_key, api_secret, password):
-    exchange = getattr(ccxt, exchange)({
-        'apiKey': api_key,
-        'secret': api_secret,
-        'password': password,
-    })
-    balance = exchange.fetch_balance()
-    return balance[pair]
+                except Exception as e:
+                # Log error
+                app.logger.error(f'Error processing TradingView webhook: {e}')
+                return 'Error processing TradingView webhook', 500
 
 
 def calculate_take_profit_price(side, entry_price, take_profit):
