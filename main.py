@@ -360,6 +360,7 @@ def reload_account():
 ########################### TRADINGVIEW WEBHOOK #################################
 #################################################################################
 
+
 # Get bot configuration from the database
 def get_bot_config(bot_name):
     bot = Bots.query.filter_by(name=bot_name).first()
@@ -408,13 +409,14 @@ def tradingview_webhook():
         if not order_amount:
             return jsonify({'error': 'Unable to calculate order amount'}), 400
         if signal.startswith('ENTER-LONG'):
-            if bot_config['bot_type'] == 'testnet':
-                order = exchange_client.create_testnet_order('BUY', 'LIMIT', 'BTC/USDT', order_amount, 50000)
-            else:
-                order = exchange_client.create_order('BUY', 'LIMIT', 'BTC/USDT', order_amount, 50000)
+            order_type = bot_config['type']
+            pair = bot_config['pair']
+            side = 'BUY'
+            quantity = order_amount
+            order = create_order(exchange_client, order_type, pair, side, quantity)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
-            Positions.update_position(bot_name, order['id'], 'long', order_amount, order['price'], datetime.now())
+            update_position(bot_name, order['orderId'], 'long', order_amount, order['price'], datetime.now())
             return jsonify({'message': 'Long position created successfully'}), 200
         elif signal.startswith('EXIT-LONG'):
             position = get_position(bot_name)
@@ -424,68 +426,98 @@ def tradingview_webhook():
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
             if order['status'] == 'FILLED':
-                if bot_config['bot_type'] == 'testnet':
-                    close_order = exchange_client.create_testnet_order('SELL', 'LIMIT', 'BTC/USDT', order_amount, 50000)
+                order_type = bot_config['type']
+                pair = bot_config['pair']
+                side = 'SELL'
+                quantity = order_amount
+                if order_type == 'LIMIT':
+                    price = float(order['price'])
                 else:
-                    # Create real order
-                    if order_type == 'LIMIT':
-                        price = float(order_parts[3])
-                    order = exchange_client.create_order(
-                        symbol=symbol,
-                        side=side,
-                        type=order_type,
-                        timeInForce='GTC',
-                        quantity=quantity,
-                        price=price
-                    )
-                    else:
-                    order = exchange_client.create_order(
-                        symbol=symbol,
-                        side=side,
-                        type=order_type,
-                        timeInForce='GTC',
-                        quantity=quantity,
-                    )
+                    price = None
+                order = create_order(exchange_client, order_type, pair, side, quantity, price)
+                update_position(bot_name, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
+                return 'Order created successfully'
+            else:
+                return jsonify({'error': 'Order has not been filled yet'}), 400
+    except Exception as e:
+        # Log error
+        app.logger.error(f'Error processing TradingView webhook: {e}')
+        return 'Error processing TradingView webhook', 500
 
-                    # Update positions table with order details
-                    if side == 'BUY':
-                        position_entry = Position(
-                            bot_id=bot_id,
-                            symbol=symbol,
-                            order_type=order_type,
-                            order_id=order['orderId'],
-                            open_time=order['transactTime'],
-                            order_price=order['price'],
-                            order_quantity=order['origQty'],
-                            stop_loss=None,
-                            take_profit=None,
-                            status='OPEN'
-                        )
-                    db.session.add(position_entry)
-                    else:
-                    position = Position.query.filter_by(
-                        bot_id=bot_id,
-                        symbol=symbol,
-                        status='OPEN'
-                    ).first()
-                    if position:
-                        position.order_type = order_type
-                    position.order_id = order['orderId']
-                    position.open_time = order['transactTime']
-                    position.order_price = order['price']
-                    position.order_quantity = order['origQty']
-                    else:
-                    raise ValueError('Could not update position table: Position not found')
 
-                    db.session.commit()
+def update_position(bot_name, order_id, status, amount, price, timestamp):
+    """
+    Update the status of a position in the database
+    """
+    bot = Bots.query.filter_by(name=bot_name).first()
+    position = Positions.query.filter_by(bot_id=bot.id, order_id=order_id).first()
+    if position:
+        position.status = status
+        position.amount = amount
+        position.price = price
+        position.closed_at = timestamp
+        db.session.commit()
+        print(f"Position updated: {position}")
+    else:
+        print(f"No position found with order ID: {order_id}")
 
-                    return 'Order created successfully'
+def create_order(exchange_client, bot, quantity, price=None):
+    try:
+        if price is not None:
+            order = exchange_client.create_order(
+                symbol=bot.pair,
+                side=bot.side,
+                type=bot.type,
+                timeInForce='GTC',
+                quantity=quantity,
+                price=price
+            )
+        else:
+            order = exchange_client.create_order(
+                symbol=bot.pair,
+                side=bot.side,
+                type=bot.type,
+                timeInForce='GTC',
+                quantity=quantity
+            )
 
-                except Exception as e:
-                # Log error
-                app.logger.error(f'Error processing TradingView webhook: {e}')
-                return 'Error processing TradingView webhook', 500
+        # Update positions table with order details
+        if bot.side == 'BUY':
+            position_entry = Positions(
+                bot_id=bot.id,
+                symbol=bot.pair,
+                order_type=bot.type,
+                order_id=order['orderId'],
+                open_time=order['transactTime'],
+                order_price=order['price'],
+                order_quantity=order['origQty'],
+                stop_loss=None,
+                take_profit=None,
+                status='OPEN'
+            )
+            db.session.add(position_entry)
+        else:
+            position = Positions.query.filter_by(
+                bot_id=bot.id,
+                symbol=bot.pair,
+                status='OPEN'
+            ).first()
+            if position:
+                position.order_type = bot.type
+                position.order_id = order['orderId']
+                position.open_time = order['transactTime']
+                position.order_price = order['price']
+                position.order_quantity = order['origQty']
+            else:
+                raise ValueError('Could not update position table: Position not found')
 
+        db.session.commit()
+        return order
+
+    except Exception as e:
+        # Log error
+        app.logger.error(f'Error processing TradingView webhook: {e}')
+        return None
 
 def calculate_take_profit_price(side, entry_price, take_profit):
     if side == "buy":
