@@ -81,10 +81,10 @@ class Positions(db.Model):
     __tablename__ = 'position'
     id = db.Column(db.Integer, primary_key=True)
     bot_id = db.Column(db.Integer, db.ForeignKey('bot.id'), nullable=False)
-    bot = relationship('Bot', back_populates='positions')
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchange.id'), nullable=False)
-    exchange = relationship('Exchanges')
     symbol = db.Column(db.String(16), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchange.id'), nullable=False)
+
+
     entry_price = db.Column(db.Float, nullable=False)
     entry_time = db.Column(db.DateTime, nullable=False)
     exit_price = db.Column(db.Float, nullable=True)
@@ -96,8 +96,12 @@ class Positions(db.Model):
     exit_order_id = db.Column(db.String(64), nullable=True)
     order_id = db.Column(db.String(64), nullable=False)
     stop_loss_order_id = db.Column(db.String(64), nullable=True)
-    stop_loss_price = db.Column(db.Float, nullable=True)
+    stop_loss = db.Column(db.Float)
+    take_profit = db.Column(db.Float)
+    status = db.Column(db.String(10), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    bot = relationship('Bot', back_populates='positions')
+    exchange = relationship('Exchanges')
 
     def __repr__(self):
         return f"<Position {self.signal_type} {self.symbol}>"

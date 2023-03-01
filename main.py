@@ -16,7 +16,6 @@ app.config.from_envvar('APP_CONFIG')
 # Create an exchange client
 exchange = Exchange(app.config['EXCHANGE_NAME'], app.config['API_KEY'], app.config['API_SECRET'])
 
-
 app.config.from_envvar('APP_CONFIG')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///easymarket.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -367,8 +366,9 @@ def get_bot_config(bot_id):
     if not bot:
         return None
     return {
-        'bot_type': bot.type,
-        'amount': bot.amount
+        'bot_type': bot.type,           # WHY IS BOT TYPE TESTNET
+        'amount': bot.amount,
+        'pair': bot.pair
     }
 
 # Get the exchange client for the bot
@@ -376,7 +376,7 @@ def get_exchange_client(bot_id):
     bot_config = get_bot_config(bot_id)
     if not bot_config:
         return None
-    exchange.set_testnet(bot_config['bot_type'] == 'testnet')
+    exchange.set_testnet(bot_config['bot_type'] == 'testnet')       # SET TESTNET DOESNT EXIST
     return exchange
 
 # Get the current position for the bot
@@ -387,7 +387,7 @@ def get_position(bot_id):
 def calculate_order_amount(bot_config, position):
     if not bot_config or not position:
         return None
-    return int(bot_config['amount'] * position.capital / 100)
+    return int(bot_config['amount'] * position.capital / 100)       # ORDER AMOUNT SHOULD BE pp percent of portfolio
 
 
 def update_position(bot_id, order_id, status, amount, price, timestamp):
@@ -395,16 +395,21 @@ def update_position(bot_id, order_id, status, amount, price, timestamp):
     Update the status of a position in the database
     """
     bot = Bots.query.filter_by(id=bot_id).first()
+    if not bot:
+        raise ValueError(f'Bot "{bot_name}" not found')
     position = Positions.query.filter_by(bot_id=bot.id, order_id=order_id).first()
-    if position:
-        position.status = status
-        position.amount = amount
-        position.price = price
-        position.closed_at = timestamp
-        db.session.commit()
-        print(f"Position updated: {position}")
-    else:
-        print(f"No position found with order ID: {order_id}")
+    if not position:
+        raise ValueError(f'Position with order ID "{order_id}" not found')
+
+    position.status = status
+    position.amount = amount
+    position.price = price
+    position.closed_at = timestamp
+
+    position.close_price = price
+    position.close_quantity = amount
+    position.fees = amount * price * bot.fee_rate
+    db.session.commit()
 
 def create_order(exchange_client, bot, quantity, price=None):
     try:
@@ -473,27 +478,35 @@ def tradingview_webhook():
         signal = data['message']
         bot_id = signal.split('_')[-1]
         bot_config = get_bot_config(bot_id)
+
         if not bot_config:
             return jsonify({'error': f'Bot "{bot_id}" not found'}), 404
         exchange_client = get_exchange_client(bot_id)
+
         if not exchange_client:
             return jsonify({'error': 'Invalid bot configuration'}), 400
         position = get_position(bot_id)
+
         if not position:
             return jsonify({'error': f'Position for bot "{bot_id}" not found'}), 404
         order_amount = calculate_order_amount(bot_config, position)
+
         if not order_amount:
             return jsonify({'error': 'Unable to calculate order amount'}), 400
+
         if signal.startswith('ENTER-LONG'):
             order_type = bot_config['type']
             pair = bot_config['pair']
             side = 'BUY'
             quantity = order_amount
-            order = create_order(exchange_client, order_type, pair, side, quantity)
+            order = create_order(exchange_client, order_type, pair, side, quantity)   ########### UPDATE THIS LINE
+
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
-            update_position(bot_id, order['orderId'], 'long', order_amount, order['price'], datetime.now())
+
+            update_position(bot_id, order['orderId'], 'long', order_amount, order['price'], datetime.now())     # SOULD BE CREATE PSOITION, NOT UPDATE POSITION
             return jsonify({'message': 'Long position created successfully'}), 200
+
         elif signal.startswith('EXIT-LONG'):
             position = get_position(bot_id)
             if not position:
@@ -501,6 +514,7 @@ def tradingview_webhook():
             order = exchange_client.get_order(position.exchange_order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
+
             if order['status'] == 'FILLED':
                 order_type = bot_config['type']
                 pair = bot_config['pair']
@@ -510,8 +524,97 @@ def tradingview_webhook():
                     price = float(order['price'])
                 else:
                     price = None
+                order = create_order(exchange_client, order_type, pair, side, quantity, price)    ########### UPDATE THIS LINE WROMNG ARHUMENTS
+                update_position(bot_id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())       # SOULD BE CREATE PSOITION, NOT UPDATE POSITION
+                return 'Order created successfully'
+            else:
+                return jsonify({'error': 'Order has not been filled yet'}), 400
+    except Exception as e:
+        # Log error
+        app.logger.error(f'Error processing TradingView webhook: {e}')
+        return 'Error processing TradingView webhook', 500
+
+    try:
+        data = json.loads(request.data)
+        signal = data['message']
+        bot_name = signal.split('_')[-1]
+        bot = get_bot_by_name(bot_name)
+        if not bot:
+            return jsonify({'error': f'Bot "{bot_name}" not found'}), 404
+        exchange_client = get_exchange_client(bot.exchange)
+        if not exchange_client:
+            return jsonify({'error': 'Invalid bot configuration'}), 400
+        position = get_position(bot.id)
+        if not position:
+            return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+        order_amount = calculate_order_amount(bot, position)
+        if not order_amount:
+            return jsonify({'error': 'Unable to calculate order amount'}), 400
+        if signal.startswith('ENTER-LONG'):
+            order_type = bot.order_type
+            pair = bot.pair
+            side = 'BUY'
+            quantity = order_amount
+            order = create_order(exchange_client, order_type, pair, side, quantity)
+            if not order:
+                return jsonify({'error': 'Unable to create order'}), 500
+            stop_loss = bot.stop_loss
+            take_profit = bot.take_profit
+            update_position(bot.id, order['orderId'], 'long', order_amount, order['price'], datetime.now(), stop_loss,
+                            take_profit)
+            return jsonify({'message': 'Long position created successfully'}), 200
+        elif signal.startswith('EXIT-LONG'):
+            position = get_position(bot.id)
+            if not position:
+                return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+            order = exchange_client.get_order(position.exchange_order_id)
+            if not order:
+                return jsonify({'error': 'Unable to get order details'}), 500
+            if order['status'] == 'FILLED':
+                order_type = bot.order_type
+                pair = bot.pair
+                side = 'SELL'
+                quantity = order_amount
+                if order_type == 'LIMIT':
+                    price = float(order['price'])
+                else:
+                    price = None
                 order = create_order(exchange_client, order_type, pair, side, quantity, price)
-                update_position(bot_id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
+                update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
+                return 'Order created successfully'
+            else:
+                return jsonify({'error': 'Order has not been filled yet'}), 400
+        elif signal.startswith('ENTER-SHORT'):
+            order_type = bot.order_type
+            pair = bot.pair
+            side = 'SELL'
+            quantity = order_amount
+            order = create_order(exchange_client, order_type, pair, side, quantity)
+            if not order:
+                return jsonify({'error': 'Unable to create order'}), 500
+            stop_loss = bot.stop_loss
+            take_profit = bot.take_profit
+            update_position(bot.id, order['orderId'], 'short', order_amount, order['price'], datetime.now(), stop_loss,
+                            take_profit)
+            return jsonify({'message': 'Short position created successfully'}), 200
+        elif signal.startswith('EXIT-SHORT'):
+            position = get_position(bot.id)
+            if not position:
+                return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+            order = exchange_client.get_order(position.exchange_order_id)
+            if not order:
+                return jsonify({'error': 'Unable to get order details'}), 500
+            if order['status'] == 'FILLED':
+                order_type = bot.order_type
+                pair = bot.pair
+                side = 'BUY'
+                quantity = order_amount
+                if order_type == 'LIMIT':
+                    price = float(order['price'])
+                else:
+                    price = None
+                order = create_order(exchange_client, order_type, pair, side, quantity, price)
+                update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
                 return jsonify({'error': 'Order has not been filled yet'}), 400
