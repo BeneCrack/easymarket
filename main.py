@@ -469,6 +469,9 @@ def create_order(exchange_client, bot, quantity, price=None):
         app.logger.error(f'Error processing TradingView webhook: {e}')
         return None
 
+def get_bot_by_id(bot_id):
+    return Bots.query.filter_by(id=bot_id).first()
+
 
 # TradingView webhook route
 @app.route('/webhook/tradingview', methods=['POST'])
@@ -476,16 +479,15 @@ def tradingview_webhook():
     try:
         data = json.loads(request.data)
         signal = data['message']
-        bot_name = signal.split('_')[-1]
-        bot = get_bot_by_name(bot_name)
+        bot = get_bot_by_id(signal.split('_')[-1])
         if not bot:
-            return jsonify({'error': f'Bot "{bot_name}" not found'}), 404
+            return jsonify({'error': f'Bot "{bot.name}" not found'}), 404
         exchange_client = get_exchange_client(bot.exchange)
         if not exchange_client:
             return jsonify({'error': 'Invalid bot configuration'}), 400
         position = get_position(bot.id)
         if not position:
-            return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+            return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
         order_amount = calculate_order_amount(bot, position)
         if not order_amount:
             return jsonify({'error': 'Unable to calculate order amount'}), 400
@@ -505,7 +507,7 @@ def tradingview_webhook():
         elif signal.startswith('EXIT-LONG'):
             position = get_position(bot.id)
             if not position:
-                return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+                return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
             order = exchange_client.get_order(position.exchange_order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
@@ -539,7 +541,7 @@ def tradingview_webhook():
         elif signal.startswith('EXIT-SHORT'):
             position = get_position(bot.id)
             if not position:
-                return jsonify({'error': f'Position for bot "{bot_name}" not found'}), 404
+                return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
             order = exchange_client.get_order(position.exchange_order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
