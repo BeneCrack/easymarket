@@ -5,7 +5,7 @@ from flask import Markup, flash, request, Flask, render_template, redirect, url_
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
 from flask_sqlalchemy import SQLAlchemy
-from classes.exchange2 import Exchange
+from classes.exchange import Exchange
 from classes.models import ExchangeModel, Bots, Accounts, Signals, Positions, Role, User
 
 app = Flask(__name__)
@@ -14,7 +14,7 @@ app = Flask(__name__)
 app.config.from_envvar('APP_CONFIG')
 
 # Create an exchange client
-exchange = Exchange(app.config['EXCHANGE_NAME'], app.config['API_KEY'], app.config['API_SECRET'])
+#exchange = Exchange(app.config['EXCHANGE_NAME'], app.config['API_KEY'], app.config['API_SECRET'])
 
 app.config.from_envvar('APP_CONFIG')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///easymarket.db'
@@ -23,7 +23,7 @@ app.config['SECRET_KEY'] = 'super-secret-key'
 
 # create database and data models
 db = SQLAlchemy(app)
-
+engine = db.engine
 # --------- setup Flask-Security ---------
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
 security = Security(app, user_datastore)
@@ -200,9 +200,9 @@ def add_account():
         api_key = request.form['api_key']
         api_secret = request.form['api_secret']
         password = request.form['password']
-        options = request.form['options']
+        testnet = bool(request.form.get("testnet"))
 
-        account = Accounts(name=name, exchange_id=exchange_id, api_key=api_key, api_secret=api_secret, password=password, options=options)
+        account = Accounts(name=name, exchange_id=exchange_id, api_key=api_key, api_secret=api_secret, password=password, testnet=testnet)
         db.session.add(account)
         db.session.commit()
 
@@ -283,26 +283,23 @@ def enabled_status_filter(value):
 def load_pairs(account_id):
     # Get the exchange associated with the selected account
     account = Accounts.query.filter_by(id=account_id).first()
-    exchange = ExchangeModel.query.filter_by(id=account.exchange_id).first()
+    exchange_model = ExchangeModel.query.filter_by(id=account.exchange_id).first()
 
-    if exchange is not None:
-        print(f"Exchange short name for account {exchange.short}")
-        exchange_class = getattr(ccxt, exchange.short.lower())
-        if exchange.short.lower() == "kucoinfuturesusd":
-            exchange = exchange_class({
-                'rateLimit': 2000,  # Optional, but recommended
-                'enableRateLimit': True,  # Optional, but recommended
-                'urls': {
-                    'api': {
-                        'public': 'https://api-sandbox-futures.kucoin.com',
-                        'private': 'https://api-sandbox-futures.kucoin.com',
-                    }
-                }
-            })
-        else:
-            exchange = exchange_class()
+    if exchange_model is not None:
+        # Get the exchange class from exchange.py based on the short name of the exchange
+        exchange_class = getattr(exchange, exchange_model.short.lower())
+        exchange_client = get_exchange_client(account.exchanges.short, account.api_key, account.api_secret, account.password, account.testnet)
+        # Initialize an instance of the exchange class
+        exchange_instance = exchange_class({
+            'apiKey': account.api_key,
+            'secret': account.api_secret,
+            'password': account.password
+        })
+        # Set testnet flag if the exchange is a testnet
+        exchange_client.set_testnet(exchange_model.type == 'testnet')
+        # Load markets
         try:
-            markets = exchange.load_markets()
+            markets = exchange_client.load_markets()
         except Exception as e:
             return f'Error loading markets: {e}'
 
@@ -360,24 +357,12 @@ def reload_account():
 #################################################################################
 
 
-# Get bot configuration from the database
-def get_bot_config(bot_id):
-    bot = Bots.query.filter_by(id=bot_id).first()
-    if not bot:
-        return None
-    return {
-        'bot_type': bot.type,           # WHY IS BOT TYPE TESTNET
-        'amount': bot.amount,
-        'pair': bot.pair
-    }
-
 # Get the exchange client for the bot
-def get_exchange_client(bot_id):
-    bot_config = get_bot_config(bot_id)
-    if not bot_config:
-        return None
-    exchange.set_testnet(bot_config['bot_type'] == 'testnet')       # SET TESTNET DOESNT EXIST
-    return exchange
+def get_exchange_client(exchange, api_key, api_secret, pw, testnet):
+    exchange_instance = Exchange(exchange, api_key, api_secret, pw, testnet)
+    if testnet:
+        exchange_instance.set_testnet()
+    return exchange_instance
 
 # Get the current position for the bot
 def get_position(bot_id):
@@ -482,7 +467,8 @@ def tradingview_webhook():
         bot = get_bot_by_id(signal.split('_')[-1])
         if not bot:
             return jsonify({'error': f'Bot "{bot.name}" not found'}), 404
-        exchange_client = get_exchange_client(bot.exchange)
+
+        exchange_client = get_exchange_client(bot.accounts.exchanges.short, bot.accounts.api_key, bot.accounts.api_secret, bot.accounts.password, bot.accounts.testnet)
         if not exchange_client:
             return jsonify({'error': 'Invalid bot configuration'}), 400
         position = get_position(bot.id)

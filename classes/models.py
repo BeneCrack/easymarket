@@ -27,10 +27,9 @@ class Bots(db.Model):
     account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-    exchange = relationship('Exchanges', back_populates='bots')
-    account = relationship('Account', back_populates='bots')
-    signals = relationship('Signal', back_populates='bots')
-    positions = relationship('Position', back_populates='bots')
+    accounts = relationship('Accounts', back_populates='bots')
+    signals = relationship('Signals', back_populates='bots')
+    positions = relationship('Positions', back_populates='bots')
 
     def __repr__(self):
         return f'<Bot {self.name}>'
@@ -40,12 +39,9 @@ class ExchangeModel(db.Model):
     __tablename__ = 'exchanges'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
-    api_key = db.Column(db.String(256), nullable=False)
-    api_secret = db.Column(db.String(256), nullable=False)
-    password = db.Column(db.String(256), nullable=True)
-    options = db.Column(db.JSON, nullable=True)
-    testnet = db.Column(db.Boolean())
-    bots = relationship('Bot', back_populates='exchanges')
+    short = db.Column(db.String(64), unique=True, nullable=False)
+
+    bots = relationship('Accounts', back_populates='exchanges')
 
     def __repr__(self):
         return f'<Exchanges {self.name}>'
@@ -61,9 +57,10 @@ class Accounts(db.Model):
     password = db.Column(db.String(256), nullable=True)
     options = db.Column(db.JSON, nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    testnet = db.Column(db.Boolean())
 
     bots = relationship('Bot', back_populates='accounts')
-    exchange = relationship('Exchanges', back_populates='accounts')
+    exchanges = relationship('ExchangeModel', back_populates='accounts')
 
     def __repr__(self):
         return f'<Account {self.name}>'
@@ -80,7 +77,7 @@ class Signals(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-    bot = relationship('Bot', back_populates='signals')
+    bots = relationship('Bot', back_populates='signals')
 
     def __repr__(self):
         return f'<Signal {self.signal_type} {self.symbol}>'
@@ -108,8 +105,8 @@ class Positions(db.Model):
     status = db.Column(db.String(10), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-    bot = relationship('Bot', back_populates='positions')
-    exchange = relationship('Exchanges', back_populates='positions')
+    bots = relationship('Bot', back_populates='positions')
+    exchanges = relationship('Exchanges', back_populates='positions')
 
     def __repr__(self):
         return f"<Position {self.signal_type} {self.symbol}>"
