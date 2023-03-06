@@ -14,7 +14,7 @@ app = Flask(__name__)
 app.config.from_envvar('APP_CONFIG')
 
 # Create an exchange client
-#exchange = Exchange(app.config['EXCHANGE_NAME'], app.config['API_KEY'], app.config['API_SECRET'])
+# exchange = Exchange(app.config['EXCHANGE_NAME'], app.config['API_KEY'], app.config['API_SECRET'])
 
 app.config.from_envvar('APP_CONFIG')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///easymarket.db'
@@ -31,9 +31,11 @@ security = Security(app, user_datastore)
 login_manager = LoginManager()
 login_manager.init_app(app)
 
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
 
 # --------- Reset DB ---------
 @app.route('/reset-database')
@@ -127,7 +129,7 @@ def create_bot():
         pair = request.form["pair"]
         amount = request.form["amount"]
         description = request.form['description']
-        time_interval = request.form['time_interval']   #       ADD THIS TO GTML
+        time_interval = request.form['time_interval']  # ADD THIS TO GTML
         account_id = request.form['account']
         bt_type = request.form["type"]
         user_id = current_user.id
@@ -137,7 +139,9 @@ def create_bot():
         # retrieve the ExchangeModel id associated with the Account object
         exchange_id = account.exchange.id
 
-        bot = Bots(name=name, enabled=enabled, description=description, time_interval=time_interval, exchange_id=exchange_id, pair=pair, type=bt_type, amount=amount, user_id=user_id, account_id=account_id)
+        bot = Bots(name=name, enabled=enabled, description=description, time_interval=time_interval,
+                   exchange_id=exchange_id, pair=pair, type=bt_type, amount=amount, user_id=user_id,
+                   account_id=account_id)
         db.session.add(bot)
         db.session.commit()
 
@@ -187,7 +191,8 @@ def delete_bot(id):
 @app.route('/accounts')
 @login_required
 def accounts():
-    accounts = db.session.query(Accounts, ExchangeModel.name).join(ExchangeModel, Accounts.exchange_id == ExchangeModel.id).all()
+    accounts = db.session.query(Accounts, ExchangeModel.name).join(ExchangeModel,
+                                                                   Accounts.exchange_id == ExchangeModel.id).all()
     return render_template('accounts.html', title="Easymarket - Connected Accounts Overview", accounts=accounts)
 
 
@@ -202,7 +207,8 @@ def add_account():
         password = request.form['password']
         testnet = bool(request.form.get("testnet"))
 
-        account = Accounts(name=name, exchange_id=exchange_id, api_key=api_key, api_secret=api_secret, password=password, testnet=testnet)
+        account = Accounts(name=name, exchange_id=exchange_id, api_key=api_key, api_secret=api_secret,
+                           password=password, testnet=testnet)
         db.session.add(account)
         db.session.commit()
 
@@ -230,7 +236,7 @@ def edit_account(id):
         flash('Account updated successfully!', 'success')
         return redirect(url_for('accounts'))
 
-    return render_template('edit_account.html',  account=account, exchanges=ExchangeModel.query.all())
+    return render_template('edit_account.html', account=account, exchanges=ExchangeModel.query.all())
 
 
 @app.route('/delete/account/<int:id>', methods=['POST'])
@@ -248,9 +254,9 @@ def delete_account(id):
 @app.route("/addexchange")
 @login_required
 def addexchange():
-    #new_exchange = Exchanges(name="Kucoin Futures Sandbox", short="kucoinfuturesusd")
-    #db.session.add(new_exchange)
-    #db.session.commit()
+    # new_exchange = Exchanges(name="Kucoin Futures Sandbox", short="kucoinfuturesusd")
+    # db.session.add(new_exchange)
+    # db.session.commit()
     all_exchanges = ExchangeModel.query.all()
     return render_template("exchanges.html", exchanges=all_exchanges)
 
@@ -259,6 +265,7 @@ def addexchange():
 @login_required
 def trades():
     return render_template("trades.html")
+
 
 @app.route("/settings")
 @login_required
@@ -287,16 +294,9 @@ def load_pairs(account_id):
 
     if exchange_model is not None:
         # Get the exchange class from exchange.py based on the short name of the exchange
-        exchange_class = getattr(exchange, exchange_model.short.lower())
-        exchange_client = get_exchange_client(account.exchanges.short, account.api_key, account.api_secret, account.password, account.testnet)
-        # Initialize an instance of the exchange class
-        exchange_instance = exchange_class({
-            'apiKey': account.api_key,
-            'secret': account.api_secret,
-            'password': account.password
-        })
-        # Set testnet flag if the exchange is a testnet
-        exchange_client.set_testnet(exchange_model.type == 'testnet')
+        exchange_client = get_exchange_client(account.exchanges.short, account.api_key, account.api_secret,
+                                              account.password, account.testnet)
+
         # Load markets
         try:
             markets = exchange_client.load_markets()
@@ -343,11 +343,11 @@ def reload_account():
     balance = exchangemodel.fetch_balance()
     usdt_balance = balance['USDT']['total']
     print(usdt_balance)
-    #balance = exchange_class.fetch_balance()[account.name]
-    #total_balance = balance['total']
+    # balance = exchange_class.fetch_balance()[account.name]
+    # total_balance = balance['total']
 
     # Convert the total balance to USDT
-    #usdt_balance = convert_to_usdt(total_balance, balance['currency'], exchange_class)
+    # usdt_balance = convert_to_usdt(total_balance, balance['currency'], exchange_class)
 
     return jsonify({'total_balance': usdt_balance})
 
@@ -364,18 +364,20 @@ def get_exchange_client(exchange, api_key, api_secret, pw, testnet):
         exchange_instance.set_testnet()
     return exchange_instance
 
+
 # Get the current position for the bot
 def get_position(bot_id):
     return Positions.query.filter_by(bot_id=bot_id).first()
+
 
 # Calculate the order amount based on the bot's configured amount
 def calculate_order_amount(bot_config, position):
     if not bot_config or not position:
         return None
-    return int(bot_config['amount'] * position.capital / 100)       # ORDER AMOUNT SHOULD BE pp percent of portfolio
+    return int(bot_config['amount'] * position.capital / 100)  # ORDER AMOUNT SHOULD BE pp percent of portfolio
 
 
-def update_position(bot_id, order_id, status, amount, price, timestamp):
+def update_position(bot_id, order_id, status, amount, price, timestamp, stop_loss, take_profit):
     """
     Update the status of a position in the database
     """
@@ -390,11 +392,14 @@ def update_position(bot_id, order_id, status, amount, price, timestamp):
     position.amount = amount
     position.price = price
     position.closed_at = timestamp
+    position.take_profit = take_profit
+    position.stop_loss = stop_loss
 
     position.close_price = price
     position.close_quantity = amount
     position.fees = amount * price * bot.fee_rate
     db.session.commit()
+
 
 def create_order(exchange_client, bot, quantity, price=None):
     try:
@@ -454,6 +459,7 @@ def create_order(exchange_client, bot, quantity, price=None):
         app.logger.error(f'Error processing TradingView webhook: {e}')
         return None
 
+
 def get_bot_by_id(bot_id):
     return Bots.query.filter_by(id=bot_id).first()
 
@@ -468,7 +474,8 @@ def tradingview_webhook():
         if not bot:
             return jsonify({'error': f'Bot "{bot.name}" not found'}), 404
 
-        exchange_client = get_exchange_client(bot.accounts.exchanges.short, bot.accounts.api_key, bot.accounts.api_secret, bot.accounts.password, bot.accounts.testnet)
+        exchange_client = get_exchange_client(bot.accounts.exchanges.short, bot.accounts.api_key,
+                                              bot.accounts.api_secret, bot.accounts.password, bot.accounts.testnet)
         if not exchange_client:
             return jsonify({'error': 'Invalid bot configuration'}), 400
         position = get_position(bot.id)
@@ -482,11 +489,12 @@ def tradingview_webhook():
             pair = bot.pair
             side = 'BUY'
             quantity = order_amount
-            order = create_order(exchange_client, order_type, pair, side, quantity)
+            order = create_order(exchange_client, bot, quantity)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
             take_profit = bot.take_profit
+
             update_position(bot.id, order['orderId'], 'long', order_amount, order['price'], datetime.now(), stop_loss,
                             take_profit)
             return jsonify({'message': 'Long position created successfully'}), 200
@@ -494,7 +502,7 @@ def tradingview_webhook():
             position = get_position(bot.id)
             if not position:
                 return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
-            order = exchange_client.get_order(position.exchange_order_id)
+            order = exchange_client.get_order_status(bot.pair, position.exchange_order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
             if order['status'] == 'FILLED':
@@ -506,7 +514,7 @@ def tradingview_webhook():
                     price = float(order['price'])
                 else:
                     price = None
-                order = create_order(exchange_client, order_type, pair, side, quantity, price)
+                order = create_order(exchange_client, bot, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
@@ -516,7 +524,7 @@ def tradingview_webhook():
             pair = bot.pair
             side = 'SELL'
             quantity = order_amount
-            order = create_order(exchange_client, order_type, pair, side, quantity)
+            order = create_order(exchange_client, bot, quantity)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
@@ -528,7 +536,7 @@ def tradingview_webhook():
             position = get_position(bot.id)
             if not position:
                 return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
-            order = exchange_client.get_order(position.exchange_order_id)
+            order = exchange_client.get_order_status(position.exchange_order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
             if order['status'] == 'FILLED':
@@ -540,7 +548,7 @@ def tradingview_webhook():
                     price = float(order['price'])
                 else:
                     price = None
-                order = create_order(exchange_client, order_type, pair, side, quantity, price)
+                order = create_order(exchange_client, bot, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
@@ -549,6 +557,7 @@ def tradingview_webhook():
         # Log error
         app.logger.error(f'Error processing TradingView webhook: {e}')
         return 'Error processing TradingView webhook', 500
+
 
 def calculate_take_profit_price(side, entry_price, take_profit):
     if side == "buy":
@@ -560,9 +569,9 @@ def calculate_take_profit_price(side, entry_price, take_profit):
 
 
 if __name__ == '__main__':
-    #app.app_context().push()
-    #db.drop_all()
-    #db.create_all()
+    # app.app_context().push()
+    # db.drop_all()
+    # db.create_all()
 
-    #Accounts.__table__.columns.user_id.unique = False
+    # Accounts.__table__.columns.user_id.unique = False
     app.run(debug=True)

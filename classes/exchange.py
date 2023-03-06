@@ -2,7 +2,9 @@ from datetime import datetime
 import ccxt
 from ccxt import ExchangeError
 from sqlalchemy.orm import sessionmaker
+
 from models import Positions
+
 
 class Exchange:
     def __init__(self, exchange_name, api_key=None, secret=None, passphrase=None, testnet=False, defaultType=None):
@@ -70,7 +72,6 @@ class Exchange:
         except ccxt.ExchangeError as e:
             raise ExchangeError(f"Error loading markets for {self.exchange_name}: {e}")
 
-
     def set_testnet(self):
         self.testnet = True
         return False
@@ -99,31 +100,6 @@ class Exchange:
             print(f"Failed to create market order: {e}")
         return order
 
-    def get_open_positions(self, symbol):
-        positions = []
-        try:
-            orders = self.exchange_class.fetch_open_orders(symbol)
-            for order in orders:
-                if order['type'] == 'limit':
-                    continue
-                position = {
-                    'order_id': order['id'],
-                    'symbol': order['symbol'],
-                    'side': order['side'],
-                    'amount': order['remaining'],
-                    'entry_price': order['price'],
-                    'leverage': None,
-                    'margin_type': None,
-                    'isolated': None,
-                    'stop_loss': None,
-                    'take_profit': None,
-                    'liquidation_price': None,
-                }
-                positions.append(position)
-        except Exception as e:
-            print(f"Failed to get open positions: {e}")
-        return positions
-
     def close_position(self, symbol, position_id):
         order = None
         position = None
@@ -143,45 +119,18 @@ class Exchange:
                 return True
         return False
 
-    def create_limit_order(self, symbol, side, amount, price):
-        order = None
-        try:
-            exchange_order = self.exchange_class.create_order(symbol, type='limit', side=side, amount=amount, price=price)
-            order = Positions(exchange=self.exchange_name, order_id=exchange_order['id'], symbol=symbol, side=side,
-                          amount=amount,
-                          price=price, status=exchange_order['status'], type='limit')
-            self.session.add(order)
-            self.session.commit()
-        except Exception as e:
-            print(f"Error creating limit order on {self.exchange_name}: {e}")
-        return order
-
-    def create_market_order(self, symbol, side, amount):
-        order = None
-        try:
-            exchange_order = self.exchange_class.create_order(symbol, type='market', side=side, amount=amount)
-            order = Positions(exchange=self.exchange_name, order_id=exchange_order['id'], symbol=symbol, side=side,
-                          amount=amount,
-                          price=exchange_order['price'], status=exchange_order['status'], type='market')
-            self.session.add(order)
-            self.session.commit()
-        except Exception as e:
-            print(f"Error creating market order on {self.exchange_name}: {e}")
-        return order
-
     def cancel_order(self, symbol, order_id):
         order = None
         try:
             exchange_order = self.exchange_class.cancel_order(order_id, symbol=symbol)
-            if exchange_order:
-                order = self.session.query(Positions).filter_by(exchange=self.exchange_name,
-                                                            order_id=exchange_order['id']).first()
-                if order:
-                    order.status = exchange_order['status']
-                    self.session.commit()
+            # if exchange_order:
+            # order = self.session.query(Positions).filter_by(exchange=self.exchange_name, order_id=exchange_order['id']).first()
+            # if order:
+            #   order.status = exchange_order['status']
+            #   self.session.commit()
         except Exception as e:
             print(f"Error cancelling order on {self.exchange_name}: {e}")
-        return order
+        return exchange_order
 
     def get_order_status(self, symbol, order_id):
         status = None
@@ -216,28 +165,3 @@ class Exchange:
         except Exception as e:
             print(f"Error placing {order_type} order on {self.exchange_name} testnet: {e}")
             return None
-
-    def get_position(self, bot_id):
-        position = Positions.query.filter_by(bot_id=bot_id).first()
-        if position:
-            return position.to_dict()
-        else:
-            return None
-
-    def update_position(self, bot_id, side, amount, price=None):
-        position = Positions.query.filter_by(bot_id=bot_id).first()
-        if not position:
-            position = Positions(bot_id=bot_id, side=side, amount=amount, price=price)
-            self.session.add(position)
-        else:
-            position.side = side
-            position.amount = amount
-            position.price = price
-        self.session.commit()
-        # Update the position in the database
-        if position.id:
-            self.session.add(position)
-        else:
-            self.session.commit()
-            return True
-        return False
