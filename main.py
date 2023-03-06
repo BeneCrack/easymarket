@@ -172,17 +172,33 @@ def create_bot():
 @app.route('/edit/bot/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_bot(id):
-    bot = Bots.query.get_or_404(id)
+    bot = Bots.query.filter_by(id=id).first()
+    if not bot:
+        raise ValueError(f'Bot "{bot.name}" not found')
+
     if request.method == 'POST':
         bot.name = request.form['name']
         bot.enabled = bool(request.form.get("enabled"))
-        bot.pair = request.form["pair"]
+        bot.symbol = request.form["pair"]
         bot.amount = request.form["amount"]
         bot.description = request.form['description']
-        bot.time_interval = request.form['time_interval']  # ADD THIS TO GTML
+        bot.time_interval = request.form['time_interval']
         bot.account_id = request.form['account']
-        bot.type = request.form["type"]
+        bot.bt_type = request.form["type"]
         bot.user_id = current_user.id
+        bot.leverage = request.form["leverage"]
+        bot.take_profit = request.form["take_profit"]
+        bot.stop_loss = request.form["stop_loss"]
+
+        # Get the exchange associated with the selected account
+        account = Accounts.query.filter_by(id=request.form['account']).first()
+        exchange_model = get_exchange_client(account)
+
+        # Load Fees
+        maker_fee, taker_fee = exchange_model.get_trading_fees(request.form["pair"])
+
+        bot.botfees.maker_fee = maker_fee
+        bot.botfees.taker_fee = taker_fee
 
         db.session.commit()
 
@@ -190,7 +206,6 @@ def edit_bot(id):
         return redirect(url_for('bots'))
     else:
         accounts = Accounts.query.filter_by(user_id=current_user.id).all()
-        bot = db.session.query(Bots, Accounts.name).join(Accounts, Bots.account_id == Accounts.id).get(id)
         return render_template('edit_bot.html', bot=bot, accounts=accounts)
 
 

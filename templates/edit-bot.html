@@ -53,7 +53,7 @@
                             class="block py-4 px-3 w-full text-sm text-gray-50 placeholder-gray-50 font-medium outline-none bg-transparent border border-gray-400 hover:border-white focus:border-green-500 rounded-lg"
                             id="formInput1-8"
                             type="text"
-                            placeholder="Bot-Name..."
+                            value="{{ bot.name }}"
                           />
                         </div>
                       </div>
@@ -68,7 +68,7 @@
                       </div>
                       <div class="w-full sm:w-2/3 px-4">
                         <div class="max-w-xl">
-                          <input class="mr-2 leading-tight" type="checkbox" />
+                          <input class="mr-2 leading-tight" type="checkbox" {% if bot.enabled %}checked{% endif %}>
                         </div>
                       </div>
                     </div>
@@ -88,9 +88,11 @@
                         <div class="max-w-xl">
                           <textarea
                             class="block h-56 py-4 px-3 w-full text-sm text-gray-50 placeholder-gray-50 font-medium outline-none bg-transparent border border-gray-400 hover:border-white focus:border-green-500 rounded-lg resize-none"
-                            id="formInput1-9"
+                            id="description"
                             type="text"
                             placeholder="Lorem ipsum dolor sit amet"
+                            name="description"
+                            value="{{ bot.description }}"
                           ></textarea>
                         </div>
                       </div>
@@ -125,18 +127,18 @@
                             ></span>
                             <select
                               class="w-full py-4 appearance-none bg-transparent outline-none"
-                              id="formInput1-6"
-                              name=""
+                              id="account"
+                              name="account_id"
                             >
-                              <option class="bg-gray-500" value="1">
-                                myKucoinFuture
+                              <option class="bg-gray-500" value="{{ bot.accounts.id }}">
+                                {{ bot.accounts.name }}
                               </option>
-                              <option class="bg-gray-500" value="1">
-                                myBinanceFuture
+
+                              {% for account in accounts %}
+                              <option class="bg-gray-500" value="{{ account.id }}">
+                                  {{ account.name }}
                               </option>
-                              <option class="bg-gray-500" value="1">
-                                myByBitFutures
-                              </option>
+                              {% endfor %}
                             </select>
                           </div>
                         </div>
@@ -172,23 +174,37 @@
                             ></span>
                             <select
                               class="w-full py-4 text-gray-50 placeholder-gray-50 appearance-none bg-transparent outline-none"
-                              id="formInput1-7"
-                              name=""
+                              id="pair"
+                              name="pair"
                             >
-                              <option class="bg-gray-500" value="1">
-                                BTC-USDT
-                              </option>
-                              <option class="bg-gray-500" value="1">
-                                ETH-USDT
-                              </option>
-                              <option class="bg-gray-500" value="1">
-                                MATIC-USDT
-                              </option>
+                              <option class="bg-gray-500" value="{{ bot.symbol }}">{{ bot.symbol }}</option>
                             </select>
                           </div>
                         </div>
                       </div>
                     </div>
+
+
+                    <div class="flex flex-wrap items-center -mx-4 pb-8 mb-8 border-b border-gray-400 border-opacity-20">
+                      <div class="w-full sm:w-1/3 px-4 mb-4 sm:mb-0">
+                        <span class="text-sm font-medium text-gray-100">Leverage</span>
+                      </div>
+                      <div class="w-full sm:w-2/3 px-4">
+                        <div class="max-w-xl">
+                          <div class="relative block px-3 w-full text-sm font-medium border border-gray-400 hover:border-white focus-within:border-green-500 rounded-lg">
+                            <span class="absolute top-1/2 right-0 mr-5 transform -translate-y-1/2">
+                              <svg width="12" height="8" viewbox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M10.9999 1.16994C10.8126 0.983692 10.5591 0.87915 10.2949 0.87915C10.0308 0.87915 9.77731 0.983692 9.58995 1.16994L5.99995 4.70994L2.45995 1.16994C2.27259 0.983692 2.01913 0.87915 1.75495 0.87915C1.49076 0.87915 1.23731 0.983692 1.04995 1.16994C0.95622 1.26291 0.881826 1.37351 0.831057 1.49537C0.780288 1.61723 0.75415 1.74793 0.75415 1.87994C0.75415 2.01195 0.780288 2.14266 0.831057 2.26452C0.881826 2.38638 0.95622 2.49698 1.04995 2.58994L5.28995 6.82994C5.38291 6.92367 5.49351 6.99807 5.61537 7.04883C5.73723 7.0996 5.86794 7.12574 5.99995 7.12574C6.13196 7.12574 6.26267 7.0996 6.38453 7.04883C6.50638 6.99807 6.61699 6.92367 6.70995 6.82994L10.9999 2.58994C11.0937 2.49698 11.1681 2.38638 11.2188 2.26452C11.2696 2.14266 11.2957 2.01195 11.2957 1.87994C11.2957 1.74793 11.2696 1.61723 11.2188 1.49537C11.1681 1.37351 11.0937 1.26291 10.9999 1.16994Z" fill="#3D485B"></path></svg
+                            ></span>
+                            <select class="w-full py-4 text-gray-50 placeholder-gray-50 appearance-none bg-transparent outline-none" id="leverage" name="leverage">
+                              <option value="{{ bot.leverage }}">{{ bot.leverage }}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+
                     <div
                       class="flex flex-wrap items-center -mx-4 pb-8 mb-8 border-b border-gray-400 border-opacity-20"
                     >
@@ -222,7 +238,7 @@
                               id="time_interval"
                               name="time_interval"
                             >
-                              <option value="">-- Select a Time Interval --</option>
+                              <option value="{{ bot.time_interval }}">{{ bot.time_interval }}</option>
                             </select>
                           </div>
                         </div>
@@ -258,13 +274,13 @@
                             ></span>
                             <select
                               class="w-full py-4 text-gray-50 placeholder-gray-50 appearance-none bg-transparent outline-none"
-                              id="formInput1-7"
-                              name=""
+                              id="type"
+                              name="type"
                             >
-                              <option class="bg-gray-500" value="1">
+                              <option class="bg-gray-500" value="LIMIT" {% if bot.order_type == 'LIMIT' %}selected{% endif %}>
                                 Limit
                               </option>
-                              <option class="bg-gray-500" value="1">
+                              <option class="bg-gray-500" value="MARKET" {% if bot.order_type == 'MARKET' %}selected{% endif %}>
                                 Market
                               </option>
                             </select>
@@ -303,26 +319,72 @@
                             ></span>
                             <select
                               class="w-full py-4 text-gray-50 placeholder-gray-50 appearance-none bg-transparent outline-none"
-                              id="formInput1-7"
-                              name=""
+                              id="amount"
+                              name="amount"
                             >
-                              <option class="bg-gray-500" value="10">10</option>
-                              <option class="bg-gray-500" value="20">20</option>
-                              <option class="bg-gray-500" value="30">30</option>
-                              <option class="bg-gray-500" value="40">40</option>
-                              <option class="bg-gray-500" value="50">50</option>
-                              <option class="bg-gray-500" value="60">60</option>
-                              <option class="bg-gray-500" value="70">70</option>
-                              <option class="bg-gray-500" value="80">80</option>
-                              <option class="bg-gray-500" value="90">90</option>
-                              <option class="bg-gray-500" value="100">
-                                100
+                              <option class="bg-gray-500" value="10" {% if bot.base_order_size == 10 %}selected{% endif %}>10</option>
+                              <option class="bg-gray-500" value="20" {% if bot.base_order_size == 20 %}selected{% endif %}>20</option>
+                              <option class="bg-gray-500" value="30" {% if bot.base_order_size == 30 %}selected{% endif %}>30</option>
+                              <option class="bg-gray-500" value="40" {% if bot.base_order_size == 40 %}selected{% endif %}>40</option>
+                              <option class="bg-gray-500" value="50" {% if bot.base_order_size == 50 %}selected{% endif %}>50</option>
+                              <option class="bg-gray-500" value="60" {% if bot.base_order_size == 60 %}selected{% endif %}>60</option>
+                              <option class="bg-gray-500" value="70" {% if bot.base_order_size == 70 %}selected{% endif %}>70</option>
+                              <option class="bg-gray-500" value="80" {% if bot.base_order_size == 80 %}selected{% endif %}>80</option>
+                              <option class="bg-gray-500" value="90" {% if bot.base_order_size == 90 %}selected{% endif %}>90</option>
+                              <option class="bg-gray-500" value="99" {% if bot.base_order_size == 99 %}selected{% endif %}>
+                                99
                               </option>
                             </select>
                           </div>
                         </div>
                       </div>
                     </div>
+
+
+                    <div
+                      class="flex flex-wrap items-center -mx-4 pb-8 mb-8 border-b border-gray-400 border-opacity-20"
+                    >
+                      <div class="w-full sm:w-1/3 px-4 mb-4 sm:mb-0">
+                        <span class="text-sm font-medium text-gray-100"
+                          >Take-Profit-Percentage</span
+                        >
+                      </div>
+                      <div class="w-full sm:w-2/3 px-4">
+                        <div class="max-w-xl">
+                          <input
+                            class="block py-4 px-3 w-full text-sm text-gray-50 placeholder-gray-50 font-medium outline-none bg-transparent border border-gray-400 hover:border-white focus:border-green-500 rounded-lg"
+                            id="take_profit"
+                            name="take_profit"
+                            type="text"
+                            value="{{ bot.take_profit }}"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+
+                    <div
+                      class="flex flex-wrap items-center -mx-4 pb-8 mb-8 border-b border-gray-400 border-opacity-20"
+                    >
+                      <div class="w-full sm:w-1/3 px-4 mb-4 sm:mb-0">
+                        <span class="text-sm font-medium text-gray-100"
+                          >Stop-Loss-Percentage</span
+                        >
+                      </div>
+                      <div class="w-full sm:w-2/3 px-4">
+                        <div class="max-w-xl">
+                          <input
+                            class="block py-4 px-3 w-full text-sm text-gray-50 placeholder-gray-50 font-medium outline-none bg-transparent border border-gray-400 hover:border-white focus:border-green-500 rounded-lg"
+                            id="stop_loss"
+                            name="stop_loss"
+                            type="text"
+                            value="{{ bot.stop_loss }}"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+
                     <div
                       class="flex flex-wrap items-center justify-between -mx-4 mb-8 pb-6 border-b border-gray-400 border-opacity-20"
                     >
@@ -347,4 +409,45 @@
             </section>
           </div>
         </div>
+                              <script>
+                              // Update the available pairs dropdown based on the selected account
+                              $('#account').on('change', function() {
+                                  var accountId = $(this).val();
+                                  $.get('/load/pairs/' + accountId, function(data) {
+                                      var pairDropdown = $('#pair');
+                                      pairDropdown.empty();
+                                      pairDropdown.append('<option value="">-- Select a pair --</option>');
+                                      $.each(data, function(index, value) {
+                                          pairDropdown.append('<option value="' + value + '">' + value + '</option>');
+                                      });
+                                  });
+                              });
+
+                              // When the pair dropdown changes
+                              $('#pair').on('change', function() {
+                                // Get the selected exchange and pair
+                                const exchange = $('#account').val();
+                                const pair = $('#pair').val();
+
+                                // Make an AJAX request to load the available leverage
+                                $.getJSON(`/load/leverage/${exchange}/${pair}`, function(leverage) {
+                                  // Populate the leverage dropdown with the returned data
+                                  $('#leverage').empty();
+                                  pairDropdown.append('<option value="">-- Select a Leverage --</option>');
+                                  $.each(leverage, function(index, value) {
+                                    $('#leverage').append($('<option>').text(value).attr('value', value));
+                                  });
+                                });
+
+                                // Make an AJAX request to load available timeframes
+                                $.getJSON(`/load/leverage/${exchange}/${pair}`, function(time_interval) {
+                                  // Populate the leverage dropdown with the returned data
+                                  $('#time_interval').empty();
+                                  pairDropdown.append('<option value="">-- Select a time_interval --</option>');
+                                  $.each(time_interval, function(index, value) {
+                                    $('#time_interval').append($('<option>').text(value).attr('value', value));
+                                  });
+                                });
+                              });
+                            </script>
 {% endblock %}
