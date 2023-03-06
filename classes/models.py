@@ -44,6 +44,7 @@ class ExchangeModel(db.Model):
     api_secret = db.Column(db.String(256), nullable=False)
     password = db.Column(db.String(256), nullable=True)
     options = db.Column(db.JSON, nullable=True)
+    testnet = db.Column(db.Boolean())
     bots = relationship('Bot', back_populates='exchanges')
 
     def __repr__(self):
