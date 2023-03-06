@@ -71,6 +71,7 @@ class Accounts(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     testnet = db.Column(db.Boolean())
     balance_usdt = db.Column(db.Float, nullable=True)
+    balance_total = db.Column(db.Float, nullable=True)
 
     bots = relationship('Bot', back_populates='accounts')
     exchanges = relationship('ExchangeModel', back_populates='accounts')

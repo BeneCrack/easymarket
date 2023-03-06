@@ -82,7 +82,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                      {% for bot, name in bots %}
+                      {% for bot in bots %}
                         <tr>
                           <td class="p-0">
                             <div class="flex items-center h-16 px-6">
@@ -98,14 +98,14 @@
                             <div class="flex items-center h-16 px-6">
                               <span
                                 class="inline-block px-2 py-1 text-xs text-gray-300 font-medium bg-gray-700 rounded-full"
-                                >{{ name }}</span
+                                >{{ bot.accounts.name }}</span
                               >
                             </div>
                           </td>
                           <td class="p-0">
                             <div class="flex items-center h-16 px-6">
                               <span class="text-sm font-medium text-gray-100"
-                                >{{ bot.pair }}</span
+                                >{{ bot.symbol }}</span
                               >
                             </div>
                           </td>

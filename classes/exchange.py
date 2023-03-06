@@ -1,9 +1,6 @@
 from datetime import datetime
 import ccxt
 from ccxt import ExchangeError
-from sqlalchemy.orm import sessionmaker
-
-from models import Positions
 
 
 class Exchange:
@@ -116,6 +113,33 @@ class Exchange:
         balance = self.exchange_class.fetch_balance()[currency]
         return balance['free']
 
+    def get_total_balance(self):
+        # Retrieve the balance for all currencies in the exchange
+        balance = self.exchange_class.fetch_balance()
+
+        # Calculate the total value in USDT
+        usdt_value = 0.0
+        for currency in balance:
+            if currency != 'USDT':
+                ticker = self.exchange_class.fetch_ticker(f"{currency}/USDT")
+                usdt_value += balance[currency] * ticker['last']
+            else:
+                usdt_value += balance[currency]
+
+        return usdt_value
+
+    def get_usdt_balance(self):
+        # Retrieve the balance for all currencies in the account
+        balance = self.exchange_class.fetch_balance()
+
+        # Calculate the available USDT balance
+        if 'USDT' in balance:
+            usdt_balance = balance['USDT']['free']
+        else:
+            usdt_balance = 0.0
+
+        return usdt_balance
+
     def get_ticker_price(self, symbol):
         ticker = self.exchange_class.fetch_ticker(symbol)
         return ticker['last'] if ticker else None
@@ -182,3 +206,29 @@ class Exchange:
         except Exception as e:
             print(f"Error placing {order_type} order on {self.exchange_name} testnet: {e}")
             return None
+
+    def create_exit_order(self, bot_config, position):
+        exchange_client = self.get_exchange_client(bot_config)
+        if not exchange_client:
+            return False
+
+        # Calculate the order amount based on the position's quantity
+        order_amount = position.quantity
+
+        order_params = {
+            'symbol': bot_config['symbol'],
+            'side': 'sell',
+            'type': 'market',
+            'quantity': order_amount
+        }
+
+        try:
+            order_result = exchange_client.create_order(**order_params)
+            if 'orderId' in order_result:
+                order_id = order_result['orderId']
+                return order_id
+            else:
+                return False
+        except Exception as e:
+            print(f"Failed to create exit order for bot {bot_config['name']}: {e}")
+            return False

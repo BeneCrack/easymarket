@@ -70,7 +70,16 @@
                               class="flex items-center h-11 py-3 px-6 bg-gray-600"
                             >
                               <span class="text-xs text-gray-300 font-semibold"
-                                >Balance</span
+                                >Total Balance</span
+                              >
+                            </div>
+                          </th>
+                          <th class="p-0">
+                            <div
+                              class="flex items-center h-11 py-3 px-6 bg-gray-600"
+                            >
+                              <span class="text-xs text-gray-300 font-semibold"
+                                >Available USDT</span
                               >
                             </div>
                           </th>
@@ -96,7 +105,7 @@
                         </tr>
                       </thead>
                       <tbody>
-                      {% for account, name in accounts %}
+                      {% for account in accounts %}
                         <tr>
                           <td class="p-0">
                             <div class="flex items-center h-16 px-6">
@@ -116,7 +125,7 @@
                             <div class="flex items-center h-16 px-6">
                               <span
                                 class="inline-block px-2 py-1 text-xs text-gray-300 font-medium bg-gray-700 rounded-full"
-                                >{{ name }}</span
+                                >{{ account.exchanges.short }}</span
                               >
                             </div>
                           </td>
@@ -129,7 +138,12 @@
                           </td>
                           <td class="p-0">
                             <div class="flex items-center h-16 px-6">
-                              <span class="text-sm font-medium text-gray-100" id="total-{{ account.id }}"</span> <!-- Add a span for displaying the total balance -->
+                              <span class="text-sm font-medium text-gray-100" id="total-{{ account.id }}">{{ account.balance_total }}</span> <!-- Add a span for displaying the total balance -->
+                            </div>
+                          </td>
+                          <td class="p-0">
+                            <div class="flex items-center h-16 px-6">
+                              <span class="text-sm font-medium text-gray-100" id="usdt-{{ account.id }}">{{ account.balance_usdt }}</span> <!-- Add a span for displaying the total balance -->
                             </div>
                           </td>
                           <td class="p-0">
@@ -140,25 +154,7 @@
                               </span>
                             </div>
                           </td>
-<script>
-function reloadAccount(account_id) {
-  fetch('/reload_account', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      account_id: account_id
-    })
-  })
-  .then(response => response.json())
-  .then(data => {
-    // Update the table with the new balance
-    document.querySelector(`#total-${account_id}`).textContent = data.total_balance;
-  })
-  .catch(error => console.error(error));
-}
-</script>
+
                           <td class="p-0">
                             <div class="flex items-center h-16 px-6"></div>
                           </td>
@@ -185,7 +181,7 @@ function reloadAccount(account_id) {
                             </a>
                             <a
                               class="inline-flex h-9 px-4 items-center justify-center bg-gray-600 hover:bg-gray-700 rounded-lg transition duration-200"
-                              href="/delete-account/{{ account.id }}"
+                              href="/delete/account/{{ account.id }}"
                             >
                               <svg
                                 width="12"
@@ -247,4 +243,26 @@ function reloadAccount(account_id) {
             </div>
           </section>
         </div>
+
+
+<script>
+function reloadAccount(account_id) {
+  fetch('/load/balance', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      account_id: account_id
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    // Update the table with the new balance
+    document.querySelector(`#total-${account_id}`).textContent = data.total_balance;
+    document.querySelector(`#usdt-${account_id}`).textContent = data.usdt_balance;
+  })
+  .catch(error => console.error(error));
+}
+</script>
 {% endblock %}
