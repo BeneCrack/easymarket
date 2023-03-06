@@ -396,7 +396,7 @@ def update_position(bot_id, order_id, status, amount, price, timestamp):
     """
     bot = Bots.query.filter_by(id=bot_id).first()
     if not bot:
-        raise ValueError(f'Bot "{bot_name}" not found')
+        raise ValueError(f'Bot "{bot.name}" not found')
     position = Positions.query.filter_by(bot_id=bot.id, order_id=order_id).first()
     if not position:
         raise ValueError(f'Position with order ID "{order_id}" not found')
