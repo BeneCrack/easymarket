@@ -18,6 +18,7 @@ class Bots(db.Model):
     base_order_size = db.Column(db.Float, nullable=False)
     leverage = db.Column(db.Float, nullable=True)
     exchange = db.Column(db.String(50), nullable=False)
+    symbol = db.Column(db.String(16), nullable=False)
     stop_loss = db.Column(db.Float, nullable=True)
     take_profit = db.Column(db.Float, nullable=True)
     description = db.Column(db.String(512), nullable=True)
@@ -30,9 +31,20 @@ class Bots(db.Model):
     accounts = relationship('Accounts', back_populates='bots')
     signals = relationship('Signals', back_populates='bots')
     positions = relationship('Positions', back_populates='bots')
+    botfees = db.relationship('BotFees', backref='bots', lazy=True)
 
     def __repr__(self):
         return f'<Bot {self.name}>'
+
+class BotFees(db.Model):
+    __tablename__ = 'botfees'
+    id = db.Column(db.Integer, primary_key=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey('bots.id'), nullable=False)
+    maker_fee = db.Column(db.Float)
+    taker_fee = db.Column(db.Float)
+
+    def __repr__(self):
+        return f'<BotFees for Bot {self.bot_id}>'
 
 
 class ExchangeModel(db.Model):
@@ -58,6 +70,7 @@ class Accounts(db.Model):
     options = db.Column(db.JSON, nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     testnet = db.Column(db.Boolean())
+    balance_usdt = db.Column(db.Float, nullable=True)
 
     bots = relationship('Bot', back_populates='accounts')
     exchanges = relationship('ExchangeModel', back_populates='accounts')
@@ -103,6 +116,7 @@ class Positions(db.Model):
     stop_loss = db.Column(db.Float)
     take_profit = db.Column(db.Float)
     status = db.Column(db.String(10), nullable=False)
+    fees = db.Column(db.Float)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     bots = relationship('Bot', back_populates='positions')

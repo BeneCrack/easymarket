@@ -15,7 +15,6 @@ class Exchange:
         self.testnet = testnet
         self.defaultType = defaultType
         self.exchange_class = self.get_exchange_class()
-        self.session = sessionmaker(bind=engine)()
 
     def get_exchange_class(self):
         exchange_options = {
@@ -64,6 +63,33 @@ class Exchange:
 
         return exchange_class
 
+    def get_trading_fees(self, symbol):
+        try:
+            fees = self.exchange_class.fetch_trading_fees(symbol)
+            maker_fee = fees['maker']
+            taker_fee = fees['taker']
+            return maker_fee, taker_fee
+        except Exception as e:
+            print(f"Error fetching trading fees for {self.exchange_name}: {e}")
+            return None, None
+
+
+    def get_available_leverage(self, symbol):
+        # Check if testnet is supported for the exchange
+        if self.testnet:
+            if hasattr(self.exchange_class, 'futures_get_leverage_brackets'):
+                # Load leverage information for the testnet exchange
+                leverage_info = self.exchange_class.futures_get_leverage_brackets(symbol)
+                return [float(level['initialLeverage']) for level in leverage_info]
+            else:
+                # Testnet not supported for this exchange, return None
+                return None
+        else:
+            # Load leverage information for the live exchange
+            leverage_info = self.exchange_class.futures_get_leverage_brackets(symbol)
+            return [float(level['initialLeverage']) for level in leverage_info]
+
+
     def load_markets(self):
         """Load all available markets for the exchange."""
         try:
@@ -71,6 +97,16 @@ class Exchange:
             return self.exchange_class.markets
         except ccxt.ExchangeError as e:
             raise ExchangeError(f"Error loading markets for {self.exchange_name}: {e}")
+
+    def get_time_intervals(self):
+        timeframes = None
+        try:
+            self.exchange_class.load_markets()
+            timeframes = self.exchange_class.timeframes.keys()
+        except ccxt.ExchangeError as e:
+            print(f"Error loading timeframes for {self.exchange_name}: {e}")
+        return timeframes
+
 
     def set_testnet(self):
         self.testnet = True
@@ -100,27 +136,8 @@ class Exchange:
             print(f"Failed to create market order: {e}")
         return order
 
-    def close_position(self, symbol, position_id):
-        order = None
-        position = None
-        for open_position in self.get_open_positions(symbol):
-            if open_position['order_id'] == position_id:
-                position = open_position
-                break
-        if position:
-            side = 'sell' if position['side'] == 'buy' else 'buy'
-            order = self.create_market_order(symbol, side, abs(position['amount']))
-            if order and order['status'] == 'closed':
-                position['is_open'] = False
-                position['close_order_id'] = order['id']
-                position['close_price'] = order['price']
-                position['close_time'] = datetime.now()
-                self.session.commit()
-                return True
-        return False
-
     def cancel_order(self, symbol, order_id):
-        order = None
+        exchange_order = None
         try:
             exchange_order = self.exchange_class.cancel_order(order_id, symbol=symbol)
             # if exchange_order:
