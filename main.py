@@ -476,67 +476,6 @@ def tradingview_webhook():
     try:
         data = json.loads(request.data)
         signal = data['message']
-        bot_id = signal.split('_')[-1]
-        bot_config = get_bot_config(bot_id)
-
-        if not bot_config:
-            return jsonify({'error': f'Bot "{bot_id}" not found'}), 404
-        exchange_client = get_exchange_client(bot_id)
-
-        if not exchange_client:
-            return jsonify({'error': 'Invalid bot configuration'}), 400
-        position = get_position(bot_id)
-
-        if not position:
-            return jsonify({'error': f'Position for bot "{bot_id}" not found'}), 404
-        order_amount = calculate_order_amount(bot_config, position)
-
-        if not order_amount:
-            return jsonify({'error': 'Unable to calculate order amount'}), 400
-
-        if signal.startswith('ENTER-LONG'):
-            order_type = bot_config['type']
-            pair = bot_config['pair']
-            side = 'BUY'
-            quantity = order_amount
-            order = create_order(exchange_client, order_type, pair, side, quantity)   ########### UPDATE THIS LINE
-
-            if not order:
-                return jsonify({'error': 'Unable to create order'}), 500
-
-            update_position(bot_id, order['orderId'], 'long', order_amount, order['price'], datetime.now())     # SOULD BE CREATE PSOITION, NOT UPDATE POSITION
-            return jsonify({'message': 'Long position created successfully'}), 200
-
-        elif signal.startswith('EXIT-LONG'):
-            position = get_position(bot_id)
-            if not position:
-                return jsonify({'error': f'Position for bot "{bot_id}" not found'}), 404
-            order = exchange_client.get_order(position.exchange_order_id)
-            if not order:
-                return jsonify({'error': 'Unable to get order details'}), 500
-
-            if order['status'] == 'FILLED':
-                order_type = bot_config['type']
-                pair = bot_config['pair']
-                side = 'SELL'
-                quantity = order_amount
-                if order_type == 'LIMIT':
-                    price = float(order['price'])
-                else:
-                    price = None
-                order = create_order(exchange_client, order_type, pair, side, quantity, price)    ########### UPDATE THIS LINE WROMNG ARHUMENTS
-                update_position(bot_id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())       # SOULD BE CREATE PSOITION, NOT UPDATE POSITION
-                return 'Order created successfully'
-            else:
-                return jsonify({'error': 'Order has not been filled yet'}), 400
-    except Exception as e:
-        # Log error
-        app.logger.error(f'Error processing TradingView webhook: {e}')
-        return 'Error processing TradingView webhook', 500
-
-    try:
-        data = json.loads(request.data)
-        signal = data['message']
         bot_name = signal.split('_')[-1]
         bot = get_bot_by_name(bot_name)
         if not bot:
