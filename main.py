@@ -218,7 +218,7 @@ def delete_bot(id):
 @app.route('/accounts')
 @login_required
 def accounts():
-    #accounts = db.session.query(Accounts, ExchangeModel.name).join(ExchangeModel, Accounts.exchange_id == ExchangeModel.id).all()
+    # accounts = db.session.query(Accounts, ExchangeModel.name).join(ExchangeModel, Accounts.exchange_id == ExchangeModel.id).all()
     accounts = Accounts.query.filter_by(user_id=current_user.id).all()
     return render_template('accounts.html', title="Easymarket - Connected Accounts Overview", accounts=accounts)
 
@@ -400,14 +400,14 @@ def load_balance():
     return jsonify({'total_balance': total_balance, 'usdt_balance': usdt_balance})
 
 
-
 #################################################################################
-########################### TRADINGVIEW WEBHOOK #################################
+################################ FUNCTIONS ######################################
 #################################################################################
 
-# GET PORTFOLIO VALUE OF ACCOUNT
 def get_total_account_balance(account_id):
-
+    """
+    GET TOTAL PORTFOLIO VALUE OF ACCOUNT
+    """
     account = Accounts.query.filter_by(id=account_id).first()
 
     exchange_client = get_exchange_client(account)
@@ -417,9 +417,11 @@ def get_total_account_balance(account_id):
     # Return the available pairs as a JSON response
     return account.balance_total
 
-# GET PORTFOLIO VALUE OF ACCOUNT
-def get_usdt_account_balance(account_id):
 
+def get_usdt_account_balance(account_id):
+    """
+    GET USDT PORTFOLIO VALUE OF ACCOUNT
+    """
     account = Accounts.query.filter_by(id=account_id).first()
 
     exchange_client = get_exchange_client(account)
@@ -430,8 +432,10 @@ def get_usdt_account_balance(account_id):
     return account.balance_usdt
 
 
-# Get the exchange client for the bot
 def get_exchange_client(account):
+    """
+    Get the exchange client.
+    """
     exchange_instance = Exchange(account.exchanges.short, account.api_key, account.api_secret, account.password,
                                  account.testnet)
     if account.testnet:
@@ -439,27 +443,41 @@ def get_exchange_client(account):
     return exchange_instance
 
 
-# Get the current position for the bot
 def get_position(bot_id):
+    """
+    Get the position for a bot.
+    """
     return Positions.query.filter_by(bot_id=bot_id).first()
 
 
-# Calculate the order amount based on the bot's configured amount
+def get_bot_by_id(bot_id):
+    """
+    Get a bot by ID.
+    """
+    return Bots.query.filter_by(id=bot_id).first()
+
+
 def get_balances(bot):
+    """
+    Calculate the order amount based on the bot's configured amount
+    """
     if not bot:
         return None
     balance_usdt = get_usdt_account_balance(bot.accounts.id) or 0.0
     order_amount = balance_usdt * bot.base_order_size / 100.0
     return order_amount
 
-def calculate_order_quantity(exchange_client, symbol, order_amount, price=None):
+
+def calculate_order_quantity(exchange_client, symbol, order_amount_percentage, position_type, order_type, price=None):
     """
-    Calculate the order quantity based on the order amount, price and symbol.
+    Calculate the order quantity based on the order amount, price, symbol, position type, and order type.
 
     Args:
         exchange_client (ccxt.Exchange): The exchange client.
         symbol (str): The symbol (e.g. 'BTC/USDT').
-        order_amount (float): The order amount as a percentage of the available balance.
+        order_amount_percentage (float): The order amount as a percentage of the available balance.
+        position_type (str): The position type ('long' or 'short').
+        order_type (str): The order type ('limit' or 'market').
         price (float): The price at which the order should be executed.
 
     Returns:
@@ -478,25 +496,193 @@ def calculate_order_quantity(exchange_client, symbol, order_amount, price=None):
         available_balance = exchange_client.fetch_balance({'type': 'trading', 'currency': quote_currency})['free']
 
     # Calculate the order amount based on the bot's configured percentage of the available balance
-    amount = float(available_balance) * (order_amount / 100.0)
+    amount = float(available_balance) * (order_amount_percentage / 100.0)
 
-    if price is None:
+    if order_type == 'market':
         # For market orders, we calculate the quantity based on the order amount
         min_notional = symbol_info['limits']['cost']['min']
-        quantity = max(exchange_client.amount_to_precision(symbol, amount / min_notional), symbol_info['limits']['amount']['min'])
-    else:
+        quantity = max(exchange_client.amount_to_precision(symbol, amount / min_notional),
+                       symbol_info['limits']['amount']['min'])
+    elif order_type == 'limit':
         # For limit orders, we calculate the quantity based on the order amount and price
         min_cost = symbol_info['limits']['cost']['min']
-        quantity = max(exchange_client.amount_to_precision(symbol, amount / price), symbol_info['limits']['amount']['min'])
+        quantity = max(exchange_client.amount_to_precision(symbol, amount / price),
+                       symbol_info['limits']['amount']['min'])
         quantity = exchange_client.price_to_precision(symbol, quantity * price)
         quantity = max(quantity, exchange_client.amount_to_precision(symbol, min_cost / price))
+    else:
+        raise ValueError(f'Invalid order type: {order_type}')
+
+    if position_type == 'long':
+        # For long positions, we buy the base currency and sell the quote currency
+        if order_type == 'limit':
+            quantity = calculate_long_limit_order_quantity(exchange_client, symbol, price, quantity)
+        elif order_type == 'market':
+            quantity = calculate_long_market_order_quantity(exchange_client, symbol, quantity)
+        else:
+            raise ValueError(f'Invalid order type: {order_type}')
+    elif position_type == 'short':
+        # For short positions, we sell the base currency and buy the quote currency
+        if order_type == 'limit':
+            quantity = calculate_short_limit_order_quantity(exchange_client, symbol, price, quantity)
+        elif order_type == 'market':
+            quantity = calculate_short_market_order_quantity(exchange_client, symbol, quantity)
+        else:
+            raise ValueError(f'Invalid order type: {order_type}')
+    else:
+        raise ValueError(f'Invalid position type: {position_type}')
 
     return exchange_client.amount_to_precision(symbol, quantity, precision=quantity_precision)
 
 
+def calculate_long_limit_order_quantity(exchange_client, symbol, price, quantity):
+    """
+    Calculate the order quantity for a long limit order.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        symbol (str): The symbol (e.g. 'BTC/USDT').
+        price (float): The price at which the order should be executed.
+        quantity (float): The quantity of the order.
+
+    Returns:
+        float: The order quantity.
+    """
+    symbol_info = exchange_client.load_markets()[symbol]
+
+    # Retrieve the maximum allowed quantity
+    max_quantity = symbol_info['limits']['amount']['max']
+
+    # Calculate the maximum order quantity based on the maximum allowed quantity
+    max_quantity_from_limit = max_quantity
+
+    # Calculate the maximum order quantity based on the available quote currency
+    quote_currency = symbol_info['quote']
+    balance = exchange_client.fetch_balance()['total']
+    if quote_currency in balance:
+        available_quote_balance = float(balance[quote_currency]['free'])
+    else:
+        available_quote_balance = float(
+            exchange_client.fetch_balance({'type': 'trading', 'currency': quote_currency})['free'])
+
+    # Calculate the maximum order quantity based on the order price and quote currency balance
+    max_quantity_from_balance = available_quote_balance / price
+
+    # Choose the minimum of the three calculated maximum order quantities
+    max_order_quantity = min(max_quantity_from_limit, max_quantity_from_balance)
+
+    # Ensure that the calculated order quantity is within the minimum and maximum allowed quantities
+    min_quantity = symbol_info['limits']['amount']['min']
+    order_quantity = max(min_quantity, min(max_order_quantity, quantity))
+
+    return order_quantity
+
+
+def calculate_short_limit_order_quantity(exchange_client, symbol, price, quantity):
+    """
+    Calculate the order quantity for a short limit order.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        symbol (str): The symbol (e.g. 'BTC/USDT').
+        price (float): The price at which the order should be executed.
+        quantity (float): The quantity of the order.
+
+    Returns:
+        float: The order quantity.
+    """
+    symbol_info = exchange_client.load_markets()[symbol]
+
+    # Retrieve the maximum allowed quantity
+    max_quantity = symbol_info['limits']['amount']['max']
+
+    # Calculate the maximum order quantity based on the maximum allowed quantity
+    max_quantity_from_limit = max_quantity
+
+    # Calculate the maximum order quantity based on the available base currency
+    base_currency = symbol_info['base']
+    balance = exchange_client.fetch_balance()['total']
+    if base_currency in balance:
+        available_base_balance = float(balance[base_currency]['free'])
+    else:
+        available_base_balance = float(
+            exchange_client.fetch_balance({'type': 'trading', 'currency': base_currency})['free'])
+
+    # Calculate the maximum order quantity based on the order price and base currency balance
+    max_quantity_from_balance = available_base_balance
+
+    # Choose the minimum of the three calculated maximum order quantities
+    max_order_quantity = min(max_quantity_from_limit, max_quantity_from_balance)
+
+    # Ensure that the calculated order quantity is within the minimum and maximum allowed quantities
+    min_quantity = symbol_info['limits']['amount']['min']
+    order_quantity = max(min_quantity, min(max_order_quantity, quantity))
+
+    return order_quantity
+
+
+def calculate_long_market_order_quantity(exchange_client, symbol, quantity):
+    """
+    Calculate the order quantity for a long market order.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        symbol (str): The symbol (e.g. 'BTC/USDT').
+        quantity (float): The desired order quantity.
+
+    Returns:
+        float: The order quantity.
+    """
+    # Check the minimum notional value
+    symbol_info = exchange_client.load_markets()[symbol]
+    min_notional = symbol_info['limits']['cost']['min']
+    notional = quantity * symbol_info['last']
+    if notional < min_notional:
+        raise ValueError(
+            f'Order quantity {quantity} is too low for symbol {symbol}. Minimum notional value is {min_notional}')
+
+    return quantity
+
+
+def calculate_short_market_order_quantity(exchange_client, symbol, quantity):
+    """
+    Calculate the order quantity for a short market order.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        symbol (str): The symbol (e.g. 'BTC/USDT').
+        quantity (float): The desired order quantity.
+
+    Returns:
+        float: The order quantity.
+    """
+    # Check the minimum notional value
+    symbol_info = exchange_client.load_markets()[symbol]
+    min_notional = symbol_info['limits']['cost']['min']
+    notional = quantity * symbol_info['last']
+    if notional < min_notional:
+        raise ValueError(
+            f'Order quantity {quantity} is too low for symbol {symbol}. Minimum notional value is {min_notional}')
+
+    return quantity
+
+
 def update_position(bot_id, order_id, status, amount, price, timestamp, stop_loss, take_profit):
     """
-    Update the status of a position in the database
+    Update the position object for a bot.
+
+    Args:
+        bot_id (int): The bot ID.
+        order_id (str): The order ID.
+        status (str): The order status ('long', 'short', or 'closed').
+        order_amount (float): The order amount.
+        order_price (float): The order price.
+        order_date (datetime): The order date.
+        stop_loss (float): The stop loss price.
+        take_profit (float): The take profit price.
+
+    Returns:
+        None
     """
     bot = Bots.query.filter_by(id=bot_id).first()
     if not bot:
@@ -522,6 +708,18 @@ def update_position(bot_id, order_id, status, amount, price, timestamp, stop_los
 
 
 def create_long_order(exchange_client, bot, order_amount, price=None):
+    """
+        Create a long order.
+
+        Args:
+            exchange_client (ccxt.Exchange): The exchange client.
+            bot (Bot): The Bot object.
+            side (str): The order side ('buy' or 'sell').
+            quantity (float): The order quantity.
+
+        Returns:
+            dict: The order object.
+    """
     symbol = bot.symbol
     side = 'BUY'
     position_side = 'long'
@@ -543,6 +741,19 @@ def create_long_order(exchange_client, bot, order_amount, price=None):
 
 
 def create_short_order(exchange_client, bot, order_amount, price=None):
+    """
+        Create a short order.
+
+        Args:
+            exchange_client (ccxt.Exchange): The exchange client.
+            bot (Bot): The Bot object.
+            side (str): The order side ('buy' or 'sell').
+            quantity (float): The order quantity.
+            price (float): The order price.
+
+        Returns:
+            dict: The order object.
+    """
     symbol = bot.symbol
     side = 'SELL'
     position_side = 'short'
@@ -570,7 +781,17 @@ def create_short_order(exchange_client, bot, order_amount, price=None):
 
 def create_long_exit_order(exchange_client, bot, quantity, price=None):
     """
-    Create a sell order to exit a long position
+    Create an order to exit a long position.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        bot (Bot): The bot instance.
+        side (str): The side of the order ('BUY' or 'SELL').
+        quantity (float): The quantity of the order.
+        price (float): The price at which the order should be executed (for limit orders).
+
+    Returns:
+        dict: The order object returned by the exchange.
     """
     if not exchange_client or not bot or not quantity:
         return None
@@ -600,7 +821,17 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
 
 def create_short_exit_order(exchange_client, bot, quantity, price=None):
     """
-    Create a buy order to exit a short position
+    Create an order to exit a short position.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        bot (Bot): The bot instance.
+        side (str): The side of the order ('BUY' or 'SELL').
+        quantity (float): The quantity of the order.
+        price (float): The price at which the order should be executed (for limit orders).
+
+    Returns:
+        dict: The order object returned by the exchange.
     """
     if not exchange_client or not bot or not quantity:
         return None
@@ -626,6 +857,15 @@ def create_short_exit_order(exchange_client, bot, quantity, price=None):
         order = exchange_client.create_limit_buy_order(symbol, quantity, price)
 
     return order
+
+
+def calculate_take_profit_price(side, entry_price, take_profit):
+    if side == "buy":
+        return entry_price * (1 + take_profit)
+    elif side == "sell":
+        return entry_price * (1 - take_profit)
+    else:
+        raise ValueError("Invalid side specified. Must be 'buy' or 'sell'.")
 
 
 def calculate_exit_order_size(bot_config, position):
@@ -707,11 +947,10 @@ def create_order(exchange_client, bot, side, signal_type, quantity, price=None):
         return None
 
 
-def get_bot_by_id(bot_id):
-    return Bots.query.filter_by(id=bot_id).first()
+#################################################################################
+########################### TRADINGVIEW WEBHOOK #################################
+#################################################################################
 
-
-# TradingView webhook route
 @app.route('/webhook/tradingview', methods=['POST'])
 def tradingview_webhook():
     try:
@@ -810,7 +1049,8 @@ def tradingview_webhook():
                 side = 'BUY'
                 if order_type == 'LIMIT':
                     price = float(order['price'])
-                    quantity = calculate_order_quantity(exchange_client=exchange_client, symbol=bot.symbol, order_amount=bot.order_amount, price=price)
+                    quantity = calculate_order_quantity(exchange_client=exchange_client, symbol=bot.symbol,
+                                                        order_amount=bot.order_amount, price=price)
                 else:
                     quantity = order_amount
                     price = None
@@ -823,16 +1063,6 @@ def tradingview_webhook():
         # Log error
         app.logger.error(f'Error processing TradingView webhook: {e}')
         return 'Error processing TradingView webhook', 500
-
-
-def calculate_take_profit_price(side, entry_price, take_profit):
-    if side == "buy":
-        return entry_price * (1 + take_profit)
-    elif side == "sell":
-        return entry_price * (1 - take_profit)
-    else:
-        raise ValueError("Invalid side specified. Must be 'buy' or 'sell'.")
-
 
 
 if __name__ == '__main__':
