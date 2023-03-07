@@ -111,6 +111,7 @@ class Positions(db.Model):
     order_id = db.Column(db.String(64), nullable=False)
     order_quantity = db.Column(db.Float, nullable=False)
     order_type = db.Column(db.String(10), nullable=False)
+    position_type = db.Column(db.String(10), nullable=False)
     initial_stop_loss = db.Column(db.Float, nullable=True)
     exit_order_id = db.Column(db.String(64), nullable=True)
     stop_loss_order_id = db.Column(db.String(64), nullable=True)
