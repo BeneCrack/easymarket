@@ -1,5 +1,5 @@
 from flask_security import RoleMixin, UserMixin
-from main import db
+from database import db
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -24,8 +24,8 @@ class Bots(db.Model):
     description = db.Column(db.String(512), nullable=True)
     time_interval = db.Column(db.String(32), nullable=False)
     type = db.Column(db.String(15))
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchange.id'), nullable=False)
-    account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
+    account_id = db.Column(db.Integer, db.ForeignKey('accounts.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     accounts = relationship('Accounts', back_populates='bots')
@@ -63,7 +63,7 @@ class Accounts(db.Model):
     __tablename__ = 'accounts'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchange.id'), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
     api_key = db.Column(db.String(256), nullable=False)
     api_secret = db.Column(db.String(256), nullable=False)
     password = db.Column(db.String(256), nullable=True)
@@ -73,7 +73,7 @@ class Accounts(db.Model):
     balance_usdt = db.Column(db.Float, nullable=True)
     balance_total = db.Column(db.Float, nullable=True)
 
-    bots = relationship('Bot', back_populates='accounts')
+    bots = relationship('Bots', back_populates='accounts')
     exchanges = relationship('ExchangeModel', back_populates='accounts')
 
     def __repr__(self):
@@ -83,15 +83,15 @@ class Accounts(db.Model):
 class Signals(db.Model):
     __tablename__ = 'signals'
     id = db.Column(db.Integer, primary_key=True)
-    bot_id = db.Column(db.Integer, db.ForeignKey('bot.id'), nullable=False)
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchange.id'), nullable=False)
-    exchange = relationship('Exchanges')
+    bot_id = db.Column(db.Integer, db.ForeignKey('bots.id'), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
     symbol = db.Column(db.String(16), nullable=False)
     signal_type = db.Column(db.String(16), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-    bots = relationship('Bot', back_populates='signals')
+    bots = relationship('Bots', back_populates='signals')
+    exchanges = relationship('Exchanges')
 
     def __repr__(self):
         return f'<Signal {self.signal_type} {self.symbol}>'
@@ -100,9 +100,9 @@ class Signals(db.Model):
 class Positions(db.Model):
     __tablename__ = 'positions'
     id = db.Column(db.Integer, primary_key=True)
-    bot_id = db.Column(db.Integer, db.ForeignKey('bot.id'), nullable=False)
+    bot_id = db.Column(db.Integer, db.ForeignKey('bots.id'), nullable=False)
     symbol = db.Column(db.String(16), nullable=False)
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchange.id'), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
     entry_price = db.Column(db.Float, nullable=False)
     entry_time = db.Column(db.DateTime, nullable=False)
     exit_price = db.Column(db.Float, nullable=True)
@@ -120,7 +120,7 @@ class Positions(db.Model):
     fees = db.Column(db.Float)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-    bots = relationship('Bot', back_populates='positions')
+    bots = relationship('Bots', back_populates='positions')
     exchanges = relationship('Exchanges', back_populates='positions')
 
     def save(self):

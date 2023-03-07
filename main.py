@@ -1,11 +1,10 @@
 import asyncio
 import json
-import time
 from datetime import datetime
 from flask import Markup, flash, request, Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
-from flask_sqlalchemy import SQLAlchemy
+from database import db
 from classes.exchange import Exchange
 from classes.models import ExchangeModel, Bots, Accounts, Signals, Positions, Role, User, BotFees
 
@@ -13,14 +12,10 @@ from classes.models import ExchangeModel, Bots, Accounts, Signals, Positions, Ro
 app = Flask(__name__)
 
 # Load configuration from environment variable
-app.config.from_envvar('APP_CONFIG')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///easymarket.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'super-secret-key'
 
-# create database and data models
-db = SQLAlchemy(app)
-engine = db.engine
 # --------- setup Flask-Security ---------
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
 security = Security(app, user_datastore)
@@ -89,7 +84,9 @@ def register():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
-        user = User(email=email, active=True)
+        user = User()
+        user.email = email
+        user.active = True
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -457,7 +454,7 @@ def calculate_order_quantity(exchange_client, symbol, order_amount_percentage, p
     else:
         raise ValueError(f'Invalid position type: {position_type}')
 
-    return exchange_client.amount_to_precision(symbol, quantity, precision=quantity_precision)
+    return exchange_client.amount_to_precision(symbol, quantity)
 
 
 def calculate_long_limit_order_quantity(exchange_client, symbol, price, quantity):
@@ -594,18 +591,18 @@ def calculate_short_market_order_quantity(exchange_client, symbol, quantity):
 
 def check_inverted_symbol(exchange_client, symbol):
     """
-    Checks if the symbol is inverted in the exchange and corrects it if necessary.
+    Check if the symbol is inverted in the exchange.
 
     Args:
         exchange_client (ccxt.Exchange): The exchange client.
         symbol (str): The symbol to check.
 
     Returns:
-        str: The corrected symbol if it was inverted, or the original symbol otherwise.
+        str: The inverted symbol, if applicable. Otherwise, the original symbol.
     """
-    exchange_info = exchange_client.fetch_exchange_info()
-    symbol_info = next((s for s in exchange_info['symbols'] if s['symbol'] == symbol), None)
-    if symbol_info and symbol_info['symbol_type'] == 'FUTURE' and symbol_info['inverted']:
+    exchange_markets = exchange_client.load_markets()
+    symbol_info = exchange_markets.get(symbol)
+    if symbol_info and symbol_info['type'] == 'future' and symbol_info.get('inverse'):
         if '/' in symbol:
             return f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
         else:
@@ -687,7 +684,7 @@ def update_position(bot, order_id, position_side, quantity, price, timestamp, po
         raise ValueError(f'Invalid position action: {position_action}')
 
 
-def create_long_order(exchange_client, bot, quantity, price=None):
+async def create_long_order(exchange_client, bot, quantity, price=None):
     """
         Create a long order.
 
@@ -731,7 +728,7 @@ def create_long_order(exchange_client, bot, quantity, price=None):
     return order
 
 
-def create_short_order(exchange_client, bot, quantity, price=None):
+async def create_short_order(exchange_client, bot, quantity, price=None):
     """
         Create a short order.
 
@@ -771,7 +768,7 @@ def create_short_order(exchange_client, bot, quantity, price=None):
     return order
 
 
-def create_long_exit_order(exchange_client, bot, quantity, price=None):
+async def create_long_exit_order(exchange_client, bot, quantity, price=None):
     """
     Create an order to exit a long position.
 
@@ -818,7 +815,7 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
     return order
 
 
-def create_short_exit_order(exchange_client, bot, quantity, price=None):
+async def create_short_exit_order(exchange_client, bot, quantity, price=None):
     """
     Create an order to exit a short position.
 
