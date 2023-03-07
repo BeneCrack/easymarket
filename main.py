@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from datetime import datetime
@@ -722,7 +723,7 @@ def create_long_order(exchange_client, bot, quantity, price=None):
             order = exchange_client.fetch_order(order['id'], symbol)
             if order['status'] == 'filled':
                 break
-            time.sleep(5)
+            await asyncio.sleep(5)
 
     # Create or update the position
     update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
@@ -762,7 +763,7 @@ def create_short_order(exchange_client, bot, quantity, price=None):
             order = exchange_client.fetch_order(order['id'], symbol)
             if order['status'] == 'filled':
                 break
-            time.sleep(5)
+            await asyncio.sleep(5)
 
     # Create or update the position
     update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
@@ -809,7 +810,7 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
             order = exchange_client.fetch_order(order['id'], symbol)
             if order['status'] == 'filled':
                 break
-            time.sleep(5)
+            await asyncio.sleep(5)
 
     # Create or update the position
     update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
@@ -856,7 +857,7 @@ def create_short_exit_order(exchange_client, bot, quantity, price=None):
             order = exchange_client.fetch_order(order['id'], symbol)
             if order['status'] == 'filled':
                 break
-            time.sleep(5)
+            await asyncio.sleep(5)
 
     # Create or update the position
     update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
@@ -936,7 +937,7 @@ def load_intervals(account_id, symbol):
     if exchange_client is not None:
         # Load Leverage
         try:
-            time_intervals = exchange_client.get_time_intervals(symbol)
+            time_intervals = exchange_client.get_time_intervals()
         except Exception as e:
             return f'Error loading time_intervals: {e}'
 
