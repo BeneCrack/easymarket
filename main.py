@@ -334,11 +334,11 @@ def load_pairs(account_id):
             return f'Error loading markets: {e}'
 
         # Extract the market symbols and sort them alphabetically
-        pairs = sorted(list(markets.keys()))
-        pair_names = [pair.split(':')[0] for pair in pairs]
-
+        pairs = sorted([symbol for symbol in markets.keys()])
+        # Convert pairs to a JSON-formatted string
+        pairs_json = json.dumps(pairs)
         # Return the available pairs as a JSON response
-        return jsonify(pair_names)
+        return pairs_json
     else:
         print(f"No account found with id {account_id}")
 
@@ -445,12 +445,53 @@ def get_position(bot_id):
 
 
 # Calculate the order amount based on the bot's configured amount
-def calculate_order_amount(bot):
+def get_balances(bot):
     if not bot:
         return None
     balance_usdt = get_usdt_account_balance(bot.accounts.id) or 0.0
     order_amount = balance_usdt * bot.base_order_size / 100.0
     return order_amount
+
+def calculate_order_quantity(exchange_client, symbol, order_amount, price=None):
+    """
+    Calculate the order quantity based on the order amount, price and symbol.
+
+    Args:
+        exchange_client (ccxt.Exchange): The exchange client.
+        symbol (str): The symbol (e.g. 'BTC/USDT').
+        order_amount (float): The order amount as a percentage of the available balance.
+        price (float): The price at which the order should be executed.
+
+    Returns:
+        float: The order quantity.
+    """
+    symbol_info = exchange_client.load_markets()[symbol]
+    balance = exchange_client.fetch_balance()['total']
+    quote_currency = symbol_info['quote']
+    quantity_precision = symbol_info['precision']['amount']
+
+    # Retrieve the available balance in the quote currency
+    if quote_currency in balance:
+        available_balance = balance[quote_currency]['free']
+    else:
+        # Fetch balance for the quote currency from the symbol
+        available_balance = exchange_client.fetch_balance({'type': 'trading', 'currency': quote_currency})['free']
+
+    # Calculate the order amount based on the bot's configured percentage of the available balance
+    amount = float(available_balance) * (order_amount / 100.0)
+
+    if price is None:
+        # For market orders, we calculate the quantity based on the order amount
+        min_notional = symbol_info['limits']['cost']['min']
+        quantity = max(exchange_client.amount_to_precision(symbol, amount / min_notional), symbol_info['limits']['amount']['min'])
+    else:
+        # For limit orders, we calculate the quantity based on the order amount and price
+        min_cost = symbol_info['limits']['cost']['min']
+        quantity = max(exchange_client.amount_to_precision(symbol, amount / price), symbol_info['limits']['amount']['min'])
+        quantity = exchange_client.price_to_precision(symbol, quantity * price)
+        quantity = max(quantity, exchange_client.amount_to_precision(symbol, min_cost / price))
+
+    return exchange_client.amount_to_precision(symbol, quantity, precision=quantity_precision)
 
 
 def update_position(bot_id, order_id, status, amount, price, timestamp, stop_loss, take_profit):
@@ -463,7 +504,10 @@ def update_position(bot_id, order_id, status, amount, price, timestamp, stop_los
     position = Positions.query.filter_by(bot_id=bot.id, order_id=order_id).first()
     if not position:
         raise ValueError(f'Position with order ID "{order_id}" not found')
-
+    if bot.order_type == "LIMIT":
+        fees = bot.botfees.maker_fee
+    else:
+        fees = bot.botfees.taker_fee
     position.status = status
     position.amount = amount
     position.price = price
@@ -473,17 +517,142 @@ def update_position(bot_id, order_id, status, amount, price, timestamp, stop_los
 
     position.close_price = price
     position.close_quantity = amount
-    position.fees = amount * price * bot.fee_rate
+    position.fees = amount * price * fees
     db.session.commit()
 
 
-def create_order(exchange_client, bot, quantity, price=None):
+def create_long_order(exchange_client, bot, order_amount, price=None):
+    symbol = bot.symbol
+    side = 'BUY'
+    position_side = 'long'
+    order_type = bot.order_type
+
+    # Calculate the order quantity
+    quantity = calculate_order_quantity(exchange_client, symbol, order_amount, price)
+
+    # Create the order
+    if order_type == 'LIMIT':
+        order = exchange_client.create_limit_buy_order(symbol, quantity, price)
+    else:
+        order = exchange_client.create_market_buy_order(symbol, quantity)
+
+    # Create or update the position
+    update_position(bot.id, order['id'], position_side, order_amount, order['price'], datetime.now())
+
+    return order
+
+
+def create_short_order(exchange_client, bot, order_amount, price=None):
+    symbol = bot.symbol
+    side = 'SELL'
+    position_side = 'short'
+    order_type = bot.order_type
+
+    # Check if symbol is reversed in the exchange
+    exchange_info = exchange_client.get_symbol_info(symbol)
+    if exchange_info['symbol_type'] == 'FUTURE' and bot.reverse_market:
+        symbol = f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
+
+    # Calculate the order quantity
+    quantity = calculate_order_quantity(exchange_client, symbol, order_amount, price)
+
+    # Create the order
+    if order_type == 'LIMIT':
+        order = exchange_client.create_limit_sell_order(symbol, quantity, price)
+    else:
+        order = exchange_client.create_market_sell_order(symbol, quantity)
+
+    # Create or update the position
+    update_position(bot.id, order['id'], position_side, order_amount, order['price'], datetime.now())
+
+    return order
+
+
+def create_long_exit_order(exchange_client, bot, quantity, price=None):
+    """
+    Create a sell order to exit a long position
+    """
+    if not exchange_client or not bot or not quantity:
+        return None
+
+    symbol = bot.symbol
+    exchange_info = exchange_client.get_exchange_info(symbol)
+    if not exchange_info:
+        return None
+
+    # Check if symbol is reversed in the exchange
+    if exchange_info['symbol_type'] == 'FUTURE' and bot.reverse_market:
+        symbol = f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
+
+    order_type = bot.order_type
+    if order_type == 'MARKET':
+        order = exchange_client.create_market_sell_order(symbol, quantity)
+    else:
+        if not price:
+            ticker = exchange_client.get_ticker(symbol)
+            if not ticker:
+                return None
+            price = ticker['askPrice']
+        order = exchange_client.create_limit_sell_order(symbol, quantity, price)
+
+    return order
+
+
+def create_short_exit_order(exchange_client, bot, quantity, price=None):
+    """
+    Create a buy order to exit a short position
+    """
+    if not exchange_client or not bot or not quantity:
+        return None
+
+    symbol = bot.symbol
+    exchange_info = exchange_client.get_exchange_info(symbol)
+    if not exchange_info:
+        return None
+
+    # Check if symbol is reversed in the exchange
+    if exchange_info['symbol_type'] == 'FUTURE' and bot.reverse_market:
+        symbol = f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
+
+    order_type = bot.order_type
+    if order_type == 'MARKET':
+        order = exchange_client.create_market_buy_order(symbol, quantity)
+    else:
+        if not price:
+            ticker = exchange_client.get_ticker(symbol)
+            if not ticker:
+                return None
+            price = ticker['bidPrice']
+        order = exchange_client.create_limit_buy_order(symbol, quantity, price)
+
+    return order
+
+
+def calculate_exit_order_size(bot_config, position):
+    if not bot_config or not position:
+        return None
+    if position.side == 'long':
+        return position.quantity
+    elif position.side == 'short':
+        # For a short position, we need to calculate the amount of the base currency (e.g. BTC) to sell
+        # We can use the unrealized PNL as an estimate of the amount of the base currency held in the position
+        unrealized_pnl = position.pnl
+        base_currency = bot_config['symbol'].split('/')[0]
+        ticker = get_ticker(bot_config)
+        if ticker:
+            base_price = ticker['bid'] if position.side == 'short' else ticker['ask']
+            base_currency_amount = unrealized_pnl / base_price
+            return base_currency_amount
+    return None
+
+
+def create_order(exchange_client, bot, side, signal_type, quantity, price=None):
     try:
         if price is not None:
             order = exchange_client.create_order(
                 symbol=bot.symbol,
-                side=bot.side,
-                type=bot.type,
+                side=side,
+                type=bot.order_type,
                 timeInForce='GTC',
                 quantity=quantity,
                 price=price
@@ -491,24 +660,26 @@ def create_order(exchange_client, bot, quantity, price=None):
         else:
             order = exchange_client.create_order(
                 symbol=bot.symbol,
-                side=bot.side,
-                type=bot.type,
+                side=side,
+                type=bot.order_type,
                 timeInForce='GTC',
                 quantity=quantity
             )
 
         # Update positions table with order details
-        if bot.side == 'BUY':
+        if side == 'BUY':
             position_entry = Positions(
                 bot_id=bot.id,
                 symbol=bot.symbol,
-                order_type=bot.type,
+                entry_price=order['price'],
+                entry_time=order['transactTime'],
+                signal_type=signal_type,
                 order_id=order['orderId'],
-                open_time=order['transactTime'],
-                order_price=order['price'],
                 order_quantity=order['origQty'],
+                order_type=bot.order_type,
                 stop_loss=None,
                 take_profit=None,
+                user_id=None,
                 status='OPEN'
             )
             db.session.add(position_entry)
@@ -519,7 +690,7 @@ def create_order(exchange_client, bot, quantity, price=None):
                 status='OPEN'
             ).first()
             if position:
-                position.order_type = bot.type
+                position.signal_type = bot.order_type
                 position.order_id = order['orderId']
                 position.open_time = order['transactTime']
                 position.order_price = order['price']
@@ -559,12 +730,12 @@ def tradingview_webhook():
         order_amount = calculate_order_amount(bot)
         if not order_amount:
             return jsonify({'error': 'Unable to calculate order amount'}), 400
+
+        # ENTER LONG TRADE AND CREATE POSITION
         if signal.startswith('ENTER-LONG'):
-            order_type = bot.order_type
-            pair = bot.symbol
             side = 'BUY'
             quantity = order_amount
-            order = create_order(exchange_client, bot, quantity)
+            order = create_order(exchange_client, bot, side, quantity)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
@@ -573,33 +744,34 @@ def tradingview_webhook():
             update_position(bot.id, order['orderId'], 'long', order_amount, order['price'], datetime.now(), stop_loss,
                             take_profit)
             return jsonify({'message': 'Long position created successfully'}), 200
+
+        # EXIT LONG TRADE AND UPDATE POSITION
         elif signal.startswith('EXIT-LONG'):
             position = get_position(bot.id)
             if not position:
                 return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
-            order = exchange_client.get_order_status(bot.symbol, position.exchange_order_id)
+            order = exchange_client.get_order_status(bot.symbol, position.order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
             if order['status'] == 'FILLED':
                 order_type = bot.order_type
-                pair = bot.symbol
                 side = 'SELL'
                 quantity = order_amount
                 if order_type == 'LIMIT':
                     price = float(order['price'])
                 else:
                     price = None
-                order = create_order(exchange_client, bot, quantity, price)
+                order = create_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
                 return jsonify({'error': 'Order has not been filled yet'}), 400
+
+        # ENTER SHORT TRADE AND CREATE POSITION
         elif signal.startswith('ENTER-SHORT'):
-            order_type = bot.order_type
-            pair = bot.symbol
             side = 'SELL'
             quantity = order_amount
-            order = create_order(exchange_client, bot, quantity)
+            order = create_order(exchange_client, bot, side, quantity)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
@@ -607,6 +779,8 @@ def tradingview_webhook():
             update_position(bot.id, order['orderId'], 'short', order_amount, order['price'], datetime.now(), stop_loss,
                             take_profit)
             return jsonify({'message': 'Short position created successfully'}), 200
+
+        # EXIT SHORT TRADE AND UPDATE POSITION
         elif signal.startswith('EXIT-SHORT'):
             position = get_position(bot.id)
             if not position:
@@ -616,14 +790,13 @@ def tradingview_webhook():
                 return jsonify({'error': 'Unable to get order details'}), 500
             if order['status'] == 'FILLED':
                 order_type = bot.order_type
-                pair = bot.symbol
                 side = 'BUY'
                 quantity = order_amount
                 if order_type == 'LIMIT':
                     price = float(order['price'])
                 else:
                     price = None
-                order = create_order(exchange_client, bot, quantity, price)
+                order = create_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
@@ -641,6 +814,7 @@ def calculate_take_profit_price(side, entry_price, take_profit):
         return entry_price * (1 - take_profit)
     else:
         raise ValueError("Invalid side specified. Must be 'buy' or 'sell'.")
+
 
 
 if __name__ == '__main__':

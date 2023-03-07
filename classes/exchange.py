@@ -1,9 +1,13 @@
 from datetime import datetime
 import ccxt
+from _decimal import Decimal
 from ccxt import ExchangeError
+import decimal
+from exchange import Exchange
 
 
 class Exchange:
+    markets = {}
     def __init__(self, exchange_name, api_key=None, secret=None, passphrase=None, testnet=False, defaultType=None):
         self.exchange_name = exchange_name
         self.api_key = api_key
@@ -89,11 +93,14 @@ class Exchange:
 
     def load_markets(self):
         """Load all available markets for the exchange."""
-        try:
-            self.exchange_class.load_markets()
-            return self.exchange_class.markets
-        except ccxt.ExchangeError as e:
-            raise ExchangeError(f"Error loading markets for {self.exchange_name}: {e}")
+        if not Exchange.markets:
+            exchange_client = self.get_exchange_class()
+            try:
+                Exchange.markets = exchange_client.load_markets()
+            except ccxt.ExchangeError as e:
+                raise ExchangeError(f"Error loading markets for {self.exchange_name}: {e}")
+
+        return Exchange.markets
 
     def get_time_intervals(self):
         timeframes = None
@@ -112,6 +119,15 @@ class Exchange:
     def get_balance(self, currency):
         balance = self.exchange_class.fetch_balance()[currency]
         return balance['free']
+
+    # Fetch the account balance
+    def fetch_balance(self, type='trading', currency=None):
+        balance = self.exchange_class.fetch_balance()
+        if type:
+            balance = balance[type]
+        if currency:
+            balance = balance[currency]
+        return balance
 
     def get_total_balance(self):
         # Retrieve the balance for all currencies in the exchange
@@ -207,28 +223,12 @@ class Exchange:
             print(f"Error placing {order_type} order on {self.exchange_name} testnet: {e}")
             return None
 
-    def create_exit_order(self, bot_config, position):
-        exchange_client = self.get_exchange_client(bot_config)
-        if not exchange_client:
-            return False
 
-        # Calculate the order amount based on the position's quantity
-        order_amount = position.quantity
-
-        order_params = {
-            'symbol': bot_config['symbol'],
-            'side': 'sell',
-            'type': 'market',
-            'quantity': order_amount
-        }
-
-        try:
-            order_result = exchange_client.create_order(**order_params)
-            if 'orderId' in order_result:
-                order_id = order_result['orderId']
-                return order_id
-            else:
-                return False
-        except Exception as e:
-            print(f"Failed to create exit order for bot {bot_config['name']}: {e}")
-            return False
+    def amount_to_precision(self, symbol, quantity, precision=None, rounding_mode=None):
+        if symbol not in self.exchange_class.markets:
+            raise ValueError(f"{symbol} not found in markets dictionary. Please call load_markets() first.")
+        if precision is None:
+            precision = self.exchange_class.markets[symbol]['precision']['amount']
+        if rounding_mode is None:
+            rounding_mode = decimal.ROUND_HALF_UP
+        return Decimal(str(quantity)).quantize(Decimal(str(precision)), rounding=rounding_mode)
