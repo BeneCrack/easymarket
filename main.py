@@ -307,7 +307,7 @@ def settings():
 
 
 #################################################################################
-############################# TEMPLATE FILTERS ##################################
+######################## ROUTES FOR AJAX LOADERS  ###############################
 #################################################################################
 
 
@@ -379,17 +379,6 @@ def load_intervals(account_id, symbol):
         print(f"No account found with id {account_id}")
 
 
-def convert_to_usdt(exchange, symbol, amount):
-    ticker = exchange.fetch_ticker(symbol)
-    price = ticker['last']
-    usdt_ticker = exchange.fetch_ticker('USDT/USDT')
-    usdt_price = usdt_ticker['last']
-    value = price * amount
-    if symbol != 'USDT':
-        value = value / usdt_price
-    return value
-
-
 @app.route('/load/balance', methods=['POST'])
 def load_balance():
     data = request.get_json()
@@ -403,6 +392,18 @@ def load_balance():
 #################################################################################
 ################################ FUNCTIONS ######################################
 #################################################################################
+
+
+def convert_to_usdt(exchange, symbol, amount):
+    ticker = exchange.fetch_ticker(symbol)
+    price = ticker['last']
+    usdt_ticker = exchange.fetch_ticker('USDT/USDT')
+    usdt_price = usdt_ticker['last']
+    value = price * amount
+    if symbol != 'USDT':
+        value = value / usdt_price
+    return value
+
 
 def get_total_account_balance(account_id):
     """
@@ -484,6 +485,11 @@ def calculate_order_quantity(exchange_client, symbol, order_amount_percentage, p
         float: The order quantity.
     """
     symbol_info = exchange_client.load_markets()[symbol]
+
+    # Check if symbol is inverted in the exchange
+    if 'inverted' in symbol_info:
+        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
+
     balance = exchange_client.fetch_balance()['total']
     quote_currency = symbol_info['quote']
     quantity_precision = symbol_info['precision']['amount']
@@ -707,7 +713,7 @@ def update_position(bot_id, order_id, status, amount, price, timestamp, stop_los
     db.session.commit()
 
 
-def create_long_order(exchange_client, bot, order_amount, price=None):
+def create_long_order(exchange_client, bot, quantity, price=None):
     """
         Create a long order.
 
@@ -725,9 +731,6 @@ def create_long_order(exchange_client, bot, order_amount, price=None):
     position_side = 'long'
     order_type = bot.order_type
 
-    # Calculate the order quantity
-    quantity = calculate_order_quantity(exchange_client, symbol, order_amount, price)
-
     # Create the order
     if order_type == 'LIMIT':
         order = exchange_client.create_limit_buy_order(symbol, quantity, price)
@@ -735,12 +738,12 @@ def create_long_order(exchange_client, bot, order_amount, price=None):
         order = exchange_client.create_market_buy_order(symbol, quantity)
 
     # Create or update the position
-    update_position(bot.id, order['id'], position_side, order_amount, order['price'], datetime.now())
+    update_position(bot.id, order['id'], position_side, quantity, order['price'], datetime.now())
 
     return order
 
 
-def create_short_order(exchange_client, bot, order_amount, price=None):
+def create_short_order(exchange_client, bot, quantity, price=None):
     """
         Create a short order.
 
@@ -760,12 +763,9 @@ def create_short_order(exchange_client, bot, order_amount, price=None):
     order_type = bot.order_type
 
     # Check if symbol is reversed in the exchange
-    exchange_info = exchange_client.get_symbol_info(symbol)
-    if exchange_info['symbol_type'] == 'FUTURE' and bot.reverse_market:
-        symbol = f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
-
-    # Calculate the order quantity
-    quantity = calculate_order_quantity(exchange_client, symbol, order_amount, price)
+    symbol_info = exchange_client.load_markets()[symbol]
+    if 'inverted' in symbol_info:
+        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
 
     # Create the order
     if order_type == 'LIMIT':
@@ -774,7 +774,7 @@ def create_short_order(exchange_client, bot, order_amount, price=None):
         order = exchange_client.create_market_sell_order(symbol, quantity)
 
     # Create or update the position
-    update_position(bot.id, order['id'], position_side, order_amount, order['price'], datetime.now())
+    update_position(bot.id, order['id'], position_side, quantity, order['price'], datetime.now())
 
     return order
 
@@ -802,8 +802,9 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
         return None
 
     # Check if symbol is reversed in the exchange
-    if exchange_info['symbol_type'] == 'FUTURE' and bot.reverse_market:
-        symbol = f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
+    symbol_info = exchange_client.load_markets()[symbol]
+    if 'inverted' in symbol_info:
+        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
 
     order_type = bot.order_type
     if order_type == 'MARKET':
@@ -842,8 +843,9 @@ def create_short_exit_order(exchange_client, bot, quantity, price=None):
         return None
 
     # Check if symbol is reversed in the exchange
-    if exchange_info['symbol_type'] == 'FUTURE' and bot.reverse_market:
-        symbol = f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
+    symbol_info = exchange_client.load_markets()[symbol]
+    if 'inverted' in symbol_info:
+        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
 
     order_type = bot.order_type
     if order_type == 'MARKET':
@@ -1006,11 +1008,10 @@ def tradingview_webhook():
                 side = 'SELL'
                 if order_type == 'LIMIT':
                     price = float(order['price'])
-                    quantity = calculate_order_quantity(exchange_client=exchange_client, symbol=bot.symbol,
-                                                        order_amount=bot.order_amount, price=price)
+                    quantity = position.order_quantity
                 else:
                     price = None
-                    quantity = order_amount
+                    quantity = position.order_quantity
                 order = create_long_exit_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
@@ -1049,10 +1050,9 @@ def tradingview_webhook():
                 side = 'BUY'
                 if order_type == 'LIMIT':
                     price = float(order['price'])
-                    quantity = calculate_order_quantity(exchange_client=exchange_client, symbol=bot.symbol,
-                                                        order_amount=bot.order_amount, price=price)
+                    quantity = position.order_quantity
                 else:
-                    quantity = order_amount
+                    quantity = position.order_quantity
                     price = None
                 order = create_short_exit_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
