@@ -743,7 +743,7 @@ def tradingview_webhook():
                 price = None
                 quantity = order_amount
 
-            order = create_order(exchange_client, bot, side, quantity)
+            order = create_long_order(exchange_client, bot, side, quantity)
 
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
@@ -772,7 +772,7 @@ def tradingview_webhook():
                 else:
                     price = None
                     quantity = order_amount
-                order = create_order(exchange_client, bot, side, quantity, price)
+                order = create_long_exit_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
@@ -788,7 +788,7 @@ def tradingview_webhook():
             else:
                 price = None
                 quantity = order_amount
-            order = create_order(exchange_client, bot, side, quantity, price)
+            order = create_short_order(exchange_client, bot, side, quantity, price)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
@@ -814,7 +814,7 @@ def tradingview_webhook():
                 else:
                     quantity = order_amount
                     price = None
-                order = create_order(exchange_client, bot, side, quantity, price)
+                order = create_short_exit_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
             else:
