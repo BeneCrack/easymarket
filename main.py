@@ -727,15 +727,24 @@ def tradingview_webhook():
         position = get_position(bot.id)
         if not position:
             return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
-        order_amount = calculate_order_amount(bot)
+        order_amount = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount)
         if not order_amount:
             return jsonify({'error': 'Unable to calculate order amount'}), 400
 
         # ENTER LONG TRADE AND CREATE POSITION
         if signal.startswith('ENTER-LONG'):
+            order_type = bot.order_type
             side = 'BUY'
-            quantity = order_amount
+
+            if order_type == 'LIMIT':
+                price = bot.price
+                quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, price)
+            else:
+                price = None
+                quantity = order_amount
+
             order = create_order(exchange_client, bot, side, quantity)
+
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
@@ -756,11 +765,13 @@ def tradingview_webhook():
             if order['status'] == 'FILLED':
                 order_type = bot.order_type
                 side = 'SELL'
-                quantity = order_amount
                 if order_type == 'LIMIT':
                     price = float(order['price'])
+                    quantity = calculate_order_quantity(exchange_client=exchange_client, symbol=bot.symbol,
+                                                        order_amount=bot.order_amount, price=price)
                 else:
                     price = None
+                    quantity = order_amount
                 order = create_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
                 return 'Order created successfully'
@@ -769,9 +780,15 @@ def tradingview_webhook():
 
         # ENTER SHORT TRADE AND CREATE POSITION
         elif signal.startswith('ENTER-SHORT'):
+            order_type = bot.order_type
             side = 'SELL'
-            quantity = order_amount
-            order = create_order(exchange_client, bot, side, quantity)
+            if order_type == 'LIMIT':
+                price = bot.price
+                quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, price)
+            else:
+                price = None
+                quantity = order_amount
+            order = create_order(exchange_client, bot, side, quantity, price)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
@@ -791,10 +808,11 @@ def tradingview_webhook():
             if order['status'] == 'FILLED':
                 order_type = bot.order_type
                 side = 'BUY'
-                quantity = order_amount
                 if order_type == 'LIMIT':
                     price = float(order['price'])
+                    quantity = calculate_order_quantity(exchange_client=exchange_client, symbol=bot.symbol, order_amount=bot.order_amount, price=price)
                 else:
+                    quantity = order_amount
                     price = None
                 order = create_order(exchange_client, bot, side, quantity, price)
                 update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
