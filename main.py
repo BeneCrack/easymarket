@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime
 from flask import Markup, flash, request, Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
@@ -307,97 +308,14 @@ def settings():
 
 
 #################################################################################
-######################## ROUTES FOR AJAX LOADERS  ###############################
-#################################################################################
-
-
-@app.template_filter('enabled_status')
-def enabled_status_filter(value):
-    if value:
-        return Markup('<span class="active">ACTIVE</span>')
-    else:
-        return Markup('<span class="inactive">INACTIVE</span>')
-
-
-@app.route('/load/pairs/<int:account_id>')
-def load_pairs(account_id):
-    # Get the exchange associated with the selected account
-    account = Accounts.query.filter_by(id=account_id).first()
-    exchange_model = get_exchange_client(account)
-
-    if exchange_model is not None:
-
-        # Load markets
-        try:
-            markets = exchange_model.load_markets()
-        except Exception as e:
-            return f'Error loading markets: {e}'
-
-        # Extract the market symbols and sort them alphabetically
-        pairs = sorted([symbol for symbol in markets.keys()])
-        # Convert pairs to a JSON-formatted string
-        pairs_json = json.dumps(pairs)
-        # Return the available pairs as a JSON response
-        return pairs_json
-    else:
-        print(f"No account found with id {account_id}")
-
-
-@app.route('/load/leverage/<int:account_id>/<string:pair>')
-def load_leverage(account_id, pair):
-    # Get the exchange associated with the selected account
-    account = Accounts.query.filter_by(id=account_id).first()
-    exchange = get_exchange_client(account)
-    if exchange is not None:
-        # Load Leverage
-        try:
-            leverage = exchange.get_available_leverage(pair)
-        except Exception as e:
-            return f'Error loading leverage: {e}'
-
-        # Return the available pairs as a JSON response
-        return jsonify(leverage)
-    else:
-        print(f"No account found with id {exchange}")
-
-
-@app.route('/load/intervals/<int:account_id>/<string:symbol>')
-def load_intervals(account_id, symbol):
-    # Get the exchange associated with the selected account
-    account = Accounts.query.filter_by(id=account_id).first()
-    exchange_client = get_exchange_client(account)
-    if exchange_client is not None:
-        # Load Leverage
-        try:
-            time_intervals = exchange_client.get_time_intervals(symbol)
-        except Exception as e:
-            return f'Error loading time_intervals: {e}'
-
-        # Return the available pairs as a JSON response
-        return jsonify(time_intervals)
-    else:
-        print(f"No account found with id {account_id}")
-
-
-@app.route('/load/balance', methods=['POST'])
-def load_balance():
-    data = request.get_json()
-    account_id = data['account_id']
-    total_balance = get_total_account_balance(account_id)
-    usdt_balance = get_usdt_account_balance(account_id)
-    # Return the available pairs as a JSON response
-    return jsonify({'total_balance': total_balance, 'usdt_balance': usdt_balance})
-
-
-#################################################################################
 ################################ FUNCTIONS ######################################
 #################################################################################
 
 
 def convert_to_usdt(exchange, symbol, amount):
-    ticker = exchange.fetch_ticker(symbol)
+    ticker = exchange.get_ticker(symbol)
     price = ticker['last']
-    usdt_ticker = exchange.fetch_ticker('USDT/USDT')
+    usdt_ticker = exchange.get_ticker('USDT/USDT')
     usdt_price = usdt_ticker['last']
     value = price * amount
     if symbol != 'USDT':
@@ -673,44 +591,99 @@ def calculate_short_market_order_quantity(exchange_client, symbol, quantity):
     return quantity
 
 
-def update_position(bot_id, order_id, status, amount, price, timestamp, stop_loss, take_profit):
+def check_inverted_symbol(exchange_client, symbol):
     """
-    Update the position object for a bot.
+    Checks if the symbol is inverted in the exchange and corrects it if necessary.
 
     Args:
-        bot_id (int): The bot ID.
-        order_id (str): The order ID.
-        status (str): The order status ('long', 'short', or 'closed').
-        order_amount (float): The order amount.
-        order_price (float): The order price.
-        order_date (datetime): The order date.
-        stop_loss (float): The stop loss price.
-        take_profit (float): The take profit price.
+        exchange_client (ccxt.Exchange): The exchange client.
+        symbol (str): The symbol to check.
 
     Returns:
-        None
+        str: The corrected symbol if it was inverted, or the original symbol otherwise.
     """
-    bot = Bots.query.filter_by(id=bot_id).first()
-    if not bot:
-        raise ValueError(f'Bot "{bot.name}" not found')
-    position = Positions.query.filter_by(bot_id=bot.id, order_id=order_id).first()
-    if not position:
-        raise ValueError(f'Position with order ID "{order_id}" not found')
-    if bot.order_type == "LIMIT":
-        fees = bot.botfees.maker_fee
+    exchange_info = exchange_client.fetch_exchange_info()
+    symbol_info = next((s for s in exchange_info['symbols'] if s['symbol'] == symbol), None)
+    if symbol_info and symbol_info['symbol_type'] == 'FUTURE' and symbol_info['inverted']:
+        if '/' in symbol:
+            return f"{symbol.split('/')[1]}{symbol.split('/')[0]}"
+        else:
+            return f"{symbol[-3:]}{symbol[:-3]}"
     else:
-        fees = bot.botfees.taker_fee
-    position.status = status
-    position.amount = amount
-    position.price = price
-    position.closed_at = timestamp
-    position.take_profit = take_profit
-    position.stop_loss = stop_loss
+        return symbol
 
-    position.close_price = price
-    position.close_quantity = amount
-    position.fees = amount * price * fees
-    db.session.commit()
+
+def update_position(bot, order_id, position_side, quantity, price, timestamp, position_action=None) -> None:
+    """
+    Create or update a position based on the provided order details.
+
+    Args:
+        bot (Bots): The Bot DB Class
+        order_id (str): The ID of the order.
+        position_side (str): The side of the position ('long' or 'short').
+        quantity (float): The quantity of the position.
+        price (float): The price of the position.
+        timestamp (datetime): The timestamp of the position.
+        position_action (str): The action being taken ('open' or 'close').
+    """
+    positions = Positions().get_positions(bot.id)
+
+    # Check if there is already an existing position for the order
+    for position in positions:
+        if position.order_id == order_id:
+            # Update the existing position
+            if position_action == 'open':
+                raise ValueError(f'Position for order {order_id} already exists')
+            elif position_action == 'close':
+                if position.status != 'open':
+                    raise ValueError(f'Position for order {order_id} is not open')
+                position.status = 'closed'
+                position.exit_price = price
+                position.exit_time = timestamp
+                # Calculate fees
+                if position.order_type == 'limit':
+                    if position_side == 'long':
+                        fee_rate = bot.botfees.maker_fee
+                    else:
+                        fee_rate = bot.botfees.taker_fee
+                    fee = fee_rate * quantity * price
+                else:
+                    if position_side == 'long':
+                        fee_rate = bot.botfees.taker_fee
+                    else:
+                        fee_rate = bot.botfees.maker_fee
+                    fee = fee_rate * quantity
+                position.fees = fee
+            else:
+                raise ValueError(f'Invalid position action: {position_action}')
+            position.save()
+            return
+
+    # Create a new position
+    if position_action == 'open':
+        position_type = 'long' if position_side == 'long' else 'short'
+        position = Positions(bot_id=bot.id, symbol=bot.symbol, exchange_id=bot.exchange.id, entry_price=price,
+                             entry_time=timestamp, order_id=order_id, order_quantity=quantity,
+                             order_type=bot.order_type, position_type=position_type, status='open', user_id=bot.user_id)
+        # Calculate fees
+        if bot.order_type == 'limit':
+            if position_side == 'long':
+                fee_rate = bot.botfees.maker_fee
+            else:
+                fee_rate = bot.botfees.taker_fee
+            fee = fee_rate * quantity * price
+        else:
+            if position_side == 'long':
+                fee_rate = bot.botfees.taker_fee
+            else:
+                fee_rate = bot.botfees.maker_fee
+            fee = fee_rate * quantity
+        position.fees = fee
+        position.save()
+    elif position_action == 'close':
+        raise ValueError(f'Position for order {order_id} not found')
+    else:
+        raise ValueError(f'Invalid position action: {position_action}')
 
 
 def create_long_order(exchange_client, bot, quantity, price=None):
@@ -725,11 +698,17 @@ def create_long_order(exchange_client, bot, quantity, price=None):
 
         Returns:
             dict: The order object.
+            :param quantity:
+            :param bot:
+            :param exchange_client:
+            :param price:
     """
     symbol = bot.symbol
-    side = 'BUY'
-    position_side = 'long'
+    position_type = 'long'
     order_type = bot.order_type
+
+    # Check if symbol is reversed in the exchange
+    symbol = check_inverted_symbol(exchange_client, symbol)
 
     # Create the order
     if order_type == 'LIMIT':
@@ -737,8 +716,16 @@ def create_long_order(exchange_client, bot, quantity, price=None):
     else:
         order = exchange_client.create_market_buy_order(symbol, quantity)
 
+    # Wait for limit order to be filled
+    if order_type == 'limit':
+        while True:
+            order = exchange_client.fetch_order(order['id'], symbol)
+            if order['status'] == 'filled':
+                break
+            time.sleep(5)
+
     # Create or update the position
-    update_position(bot.id, order['id'], position_side, quantity, order['price'], datetime.now())
+    update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
 
     return order
 
@@ -750,7 +737,6 @@ def create_short_order(exchange_client, bot, quantity, price=None):
         Args:
             exchange_client (ccxt.Exchange): The exchange client.
             bot (Bot): The Bot object.
-            side (str): The order side ('buy' or 'sell').
             quantity (float): The order quantity.
             price (float): The order price.
 
@@ -758,14 +744,11 @@ def create_short_order(exchange_client, bot, quantity, price=None):
             dict: The order object.
     """
     symbol = bot.symbol
-    side = 'SELL'
-    position_side = 'short'
+    position_type = 'short'
     order_type = bot.order_type
 
     # Check if symbol is reversed in the exchange
-    symbol_info = exchange_client.load_markets()[symbol]
-    if 'inverted' in symbol_info:
-        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
+    symbol = check_inverted_symbol(exchange_client, symbol)
 
     # Create the order
     if order_type == 'LIMIT':
@@ -773,8 +756,16 @@ def create_short_order(exchange_client, bot, quantity, price=None):
     else:
         order = exchange_client.create_market_sell_order(symbol, quantity)
 
+    # Wait for limit order to be filled
+    if order_type == 'limit':
+        while True:
+            order = exchange_client.fetch_order(order['id'], symbol)
+            if order['status'] == 'filled':
+                break
+            time.sleep(5)
+
     # Create or update the position
-    update_position(bot.id, order['id'], position_side, quantity, order['price'], datetime.now())
+    update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
 
     return order
 
@@ -786,7 +777,6 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
     Args:
         exchange_client (ccxt.Exchange): The exchange client.
         bot (Bot): The bot instance.
-        side (str): The side of the order ('BUY' or 'SELL').
         quantity (float): The quantity of the order.
         price (float): The price at which the order should be executed (for limit orders).
 
@@ -797,14 +787,10 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
         return None
 
     symbol = bot.symbol
-    exchange_info = exchange_client.get_exchange_info(symbol)
-    if not exchange_info:
-        return None
 
     # Check if symbol is reversed in the exchange
-    symbol_info = exchange_client.load_markets()[symbol]
-    if 'inverted' in symbol_info:
-        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
+    symbol = check_inverted_symbol(exchange_client, symbol)
+    position_type = 'long'
 
     order_type = bot.order_type
     if order_type == 'MARKET':
@@ -817,6 +803,17 @@ def create_long_exit_order(exchange_client, bot, quantity, price=None):
             price = ticker['askPrice']
         order = exchange_client.create_limit_sell_order(symbol, quantity, price)
 
+    # Wait for limit order to be filled
+    if order_type == 'limit':
+        while True:
+            order = exchange_client.fetch_order(order['id'], symbol)
+            if order['status'] == 'filled':
+                break
+            time.sleep(5)
+
+    # Create or update the position
+    update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
+
     return order
 
 
@@ -827,7 +824,6 @@ def create_short_exit_order(exchange_client, bot, quantity, price=None):
     Args:
         exchange_client (ccxt.Exchange): The exchange client.
         bot (Bot): The bot instance.
-        side (str): The side of the order ('BUY' or 'SELL').
         quantity (float): The quantity of the order.
         price (float): The price at which the order should be executed (for limit orders).
 
@@ -838,14 +834,10 @@ def create_short_exit_order(exchange_client, bot, quantity, price=None):
         return None
 
     symbol = bot.symbol
-    exchange_info = exchange_client.get_exchange_info(symbol)
-    if not exchange_info:
-        return None
 
     # Check if symbol is reversed in the exchange
-    symbol_info = exchange_client.load_markets()[symbol]
-    if 'inverted' in symbol_info:
-        symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
+    symbol = check_inverted_symbol(exchange_client, symbol)
+    position_type = 'short'
 
     order_type = bot.order_type
     if order_type == 'MARKET':
@@ -857,6 +849,17 @@ def create_short_exit_order(exchange_client, bot, quantity, price=None):
                 return None
             price = ticker['bidPrice']
         order = exchange_client.create_limit_buy_order(symbol, quantity, price)
+
+    # Wait for limit order to be filled
+    if order_type == 'limit':
+        while True:
+            order = exchange_client.fetch_order(order['id'], symbol)
+            if order['status'] == 'filled':
+                break
+            time.sleep(5)
+
+    # Create or update the position
+    update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
 
     return order
 
@@ -870,83 +873,87 @@ def calculate_take_profit_price(side, entry_price, take_profit):
         raise ValueError("Invalid side specified. Must be 'buy' or 'sell'.")
 
 
-def calculate_exit_order_size(bot_config, position):
-    if not bot_config or not position:
-        return None
-    if position.side == 'long':
-        return position.quantity
-    elif position.side == 'short':
-        # For a short position, we need to calculate the amount of the base currency (e.g. BTC) to sell
-        # We can use the unrealized PNL as an estimate of the amount of the base currency held in the position
-        unrealized_pnl = position.pnl
-        base_currency = bot_config['symbol'].split('/')[0]
-        ticker = get_ticker(bot_config)
-        if ticker:
-            base_price = ticker['bid'] if position.side == 'short' else ticker['ask']
-            base_currency_amount = unrealized_pnl / base_price
-            return base_currency_amount
-    return None
+#################################################################################
+######################## ROUTES FOR AJAX LOADERS  ###############################
+#################################################################################
 
 
-def create_order(exchange_client, bot, side, signal_type, quantity, price=None):
-    try:
-        if price is not None:
-            order = exchange_client.create_order(
-                symbol=bot.symbol,
-                side=side,
-                type=bot.order_type,
-                timeInForce='GTC',
-                quantity=quantity,
-                price=price
-            )
-        else:
-            order = exchange_client.create_order(
-                symbol=bot.symbol,
-                side=side,
-                type=bot.order_type,
-                timeInForce='GTC',
-                quantity=quantity
-            )
+@app.template_filter('enabled_status')
+def enabled_status_filter(value):
+    if value:
+        return Markup('<span class="active">ACTIVE</span>')
+    else:
+        return Markup('<span class="inactive">INACTIVE</span>')
 
-        # Update positions table with order details
-        if side == 'BUY':
-            position_entry = Positions(
-                bot_id=bot.id,
-                symbol=bot.symbol,
-                entry_price=order['price'],
-                entry_time=order['transactTime'],
-                signal_type=signal_type,
-                order_id=order['orderId'],
-                order_quantity=order['origQty'],
-                order_type=bot.order_type,
-                stop_loss=None,
-                take_profit=None,
-                user_id=None,
-                status='OPEN'
-            )
-            db.session.add(position_entry)
-        else:
-            position = Positions.query.filter_by(
-                bot_id=bot.id,
-                symbol=bot.symbol,
-                status='OPEN'
-            ).first()
-            if position:
-                position.signal_type = bot.order_type
-                position.order_id = order['orderId']
-                position.open_time = order['transactTime']
-                position.order_price = order['price']
-                position.order_quantity = order['origQty']
-            else:
-                raise ValueError('Could not update position table: Position not found')
 
-        db.session.commit()
-        return order
+@app.route('/load/pairs/<int:account_id>')
+def load_pairs(account_id):
+    # Get the exchange associated with the selected account
+    account = Accounts.query.filter_by(id=account_id).first()
+    exchange_model = get_exchange_client(account)
 
-    except Exception as e:
-        # Log error
-        app.logger.error(f'Error processing TradingView webhook: {e}')
-        return None
+    if exchange_model is not None:
+
+        # Load markets
+        try:
+            markets = exchange_model.load_markets()
+        except Exception as e:
+            return f'Error loading markets: {e}'
+
+        # Extract the market symbols and sort them alphabetically
+        pairs = sorted([symbol for symbol in markets.keys()])
+        # Convert pairs to a JSON-formatted string
+        pairs_json = json.dumps(pairs)
+        # Return the available pairs as a JSON response
+        return pairs_json
+    else:
+        print(f"No account found with id {account_id}")
+
+
+@app.route('/load/leverage/<int:account_id>/<string:pair>')
+def load_leverage(account_id, pair):
+    # Get the exchange associated with the selected account
+    account = Accounts.query.filter_by(id=account_id).first()
+    exchange = get_exchange_client(account)
+    if exchange is not None:
+        # Load Leverage
+        try:
+            leverage = exchange.get_available_leverage(pair)
+        except Exception as e:
+            return f'Error loading leverage: {e}'
+
+        # Return the available pairs as a JSON response
+        return jsonify(leverage)
+    else:
+        print(f"No account found with id {exchange}")
+
+
+@app.route('/load/intervals/<int:account_id>/<string:symbol>')
+def load_intervals(account_id, symbol):
+    # Get the exchange associated with the selected account
+    account = Accounts.query.filter_by(id=account_id).first()
+    exchange_client = get_exchange_client(account)
+    if exchange_client is not None:
+        # Load Leverage
+        try:
+            time_intervals = exchange_client.get_time_intervals(symbol)
+        except Exception as e:
+            return f'Error loading time_intervals: {e}'
+
+        # Return the available pairs as a JSON response
+        return jsonify(time_intervals)
+    else:
+        print(f"No account found with id {account_id}")
+
+
+@app.route('/load/balance', methods=['POST'])
+def load_balance():
+    data = request.get_json()
+    account_id = data['account_id']
+    total_balance = get_total_account_balance(account_id)
+    usdt_balance = get_usdt_account_balance(account_id)
+    # Return the available pairs as a JSON response
+    return jsonify({'total_balance': total_balance, 'usdt_balance': usdt_balance})
 
 
 #################################################################################
@@ -968,31 +975,24 @@ def tradingview_webhook():
         position = get_position(bot.id)
         if not position:
             return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
-        order_amount = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount)
-        if not order_amount:
-            return jsonify({'error': 'Unable to calculate order amount'}), 400
 
         # ENTER LONG TRADE AND CREATE POSITION
         if signal.startswith('ENTER-LONG'):
             order_type = bot.order_type
-            side = 'BUY'
-
             if order_type == 'LIMIT':
                 price = bot.price
-                quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, price)
             else:
                 price = None
-                quantity = order_amount
 
-            order = create_long_order(exchange_client, bot, side, quantity)
+            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'long', bot.order_type, price)
+            order = create_long_order(exchange_client, bot, quantity, price)
 
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
             take_profit = bot.take_profit
 
-            update_position(bot.id, order['orderId'], 'long', order_amount, order['price'], datetime.now(), stop_loss,
-                            take_profit)
+            update_position(bot, order['orderId'], 'long', quantity, order['price'], datetime.now(), 'open')
             return jsonify({'message': 'Long position created successfully'}), 200
 
         # EXIT LONG TRADE AND UPDATE POSITION
@@ -1012,8 +1012,8 @@ def tradingview_webhook():
                 else:
                     price = None
                     quantity = position.order_quantity
-                order = create_long_exit_order(exchange_client, bot, side, quantity, price)
-                update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
+                order = create_long_exit_order(exchange_client, bot, quantity, price)
+                update_position(bot.id, order['orderId'], 'closed', quantity, order['price'], datetime.now(), 'close')
                 return 'Order created successfully'
             else:
                 return jsonify({'error': 'Order has not been filled yet'}), 400
@@ -1024,17 +1024,15 @@ def tradingview_webhook():
             side = 'SELL'
             if order_type == 'LIMIT':
                 price = bot.price
-                quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, price)
             else:
                 price = None
-                quantity = order_amount
-            order = create_short_order(exchange_client, bot, side, quantity, price)
+            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'short', bot.order_type, price)
+            order = create_short_order(exchange_client, bot, quantity, price)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
             stop_loss = bot.stop_loss
             take_profit = bot.take_profit
-            update_position(bot.id, order['orderId'], 'short', order_amount, order['price'], datetime.now(), stop_loss,
-                            take_profit)
+            update_position(bot, order['orderId'], 'short', quantity, order['price'], datetime.now(), 'open')
             return jsonify({'message': 'Short position created successfully'}), 200
 
         # EXIT SHORT TRADE AND UPDATE POSITION
@@ -1042,7 +1040,7 @@ def tradingview_webhook():
             position = get_position(bot.id)
             if not position:
                 return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
-            order = exchange_client.get_order_status(position.order_id)
+            order = exchange_client.get_order_status(bot.symbol, position.order_id)
             if not order:
                 return jsonify({'error': 'Unable to get order details'}), 500
             if order['status'] == 'FILLED':
@@ -1054,8 +1052,8 @@ def tradingview_webhook():
                 else:
                     quantity = position.order_quantity
                     price = None
-                order = create_short_exit_order(exchange_client, bot, side, quantity, price)
-                update_position(bot.id, order['orderId'], 'closed', order_amount, order['price'], datetime.now())
+                order = create_short_exit_order(exchange_client, bot, quantity, price)
+                update_position(bot.id, order['orderId'], 'closed', quantity, order['price'], datetime.now(), 'close')
                 return 'Order created successfully'
             else:
                 return jsonify({'error': 'Order has not been filled yet'}), 400
@@ -1072,22 +1070,3 @@ if __name__ == '__main__':
 
     # Accounts.__table__.columns.user_id.unique = False
     app.run(debug=True)
-
-# def close_position(self, symbol, position_id):
-# order = None
-# position = None
-# for open_position in self.get_open_positions(symbol):
-# if open_position['order_id'] == position_id:
-# position = open_position
-# break
-# if position:
-# side = 'sell' if position['side'] == 'buy' else 'buy'
-# order = self.create_market_order(symbol, side, abs(position['amount']))
-# if order and order['status'] == 'closed':
-# position['is_open'] = False
-# position['close_order_id'] = order['id']
-# position['close_price'] = order['price']
-# position['close_time'] = datetime.now()
-# self.session.commit()
-# return True
-# return False

@@ -107,7 +107,6 @@ class Positions(db.Model):
     entry_time = db.Column(db.DateTime, nullable=False)
     exit_price = db.Column(db.Float, nullable=True)
     exit_time = db.Column(db.DateTime, nullable=True)
-    signal_type = db.Column(db.String(16), nullable=False)
     order_id = db.Column(db.String(64), nullable=False)
     order_quantity = db.Column(db.Float, nullable=False)
     order_type = db.Column(db.String(10), nullable=False)
@@ -123,6 +122,10 @@ class Positions(db.Model):
 
     bots = relationship('Bot', back_populates='positions')
     exchanges = relationship('Exchanges', back_populates='positions')
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
 
     def __repr__(self):
         return f"<Position {self.signal_type} {self.symbol}>"

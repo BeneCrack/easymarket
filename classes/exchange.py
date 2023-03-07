@@ -1,13 +1,11 @@
-from datetime import datetime
 import ccxt
 from _decimal import Decimal
 from ccxt import ExchangeError
 import decimal
-from exchange import Exchange
-
 
 class Exchange:
     markets = {}
+
     def __init__(self, exchange_name, api_key=None, secret=None, passphrase=None, testnet=False, defaultType=None):
         self.exchange_name = exchange_name
         self.api_key = api_key
@@ -74,7 +72,6 @@ class Exchange:
             print(f"Error fetching trading fees for {self.exchange_name}: {e}")
             return None, None
 
-
     def get_available_leverage(self, symbol):
         # Check if testnet is supported for the exchange
         if self.testnet:
@@ -89,7 +86,6 @@ class Exchange:
             # Load leverage information for the live exchange
             leverage_info = self.exchange_class.futures_get_leverage_brackets(symbol)
             return [float(level['initialLeverage']) for level in leverage_info]
-
 
     def load_markets(self):
         """Load all available markets for the exchange."""
@@ -110,7 +106,6 @@ class Exchange:
         except ccxt.ExchangeError as e:
             print(f"Error loading timeframes for {self.exchange_name}: {e}")
         return timeframes
-
 
     def set_testnet(self):
         self.testnet = True
@@ -155,6 +150,13 @@ class Exchange:
             usdt_balance = 0.0
 
         return usdt_balance
+
+    def get_ticker(self, symbol):
+        try:
+            return self.exchange_class.fetch_ticker(symbol)
+        except Exception as e:
+            print(f"Error getting ticker for {symbol}: {e}")
+            return None
 
     def get_ticker_price(self, symbol):
         ticker = self.exchange_class.fetch_ticker(symbol)
@@ -222,7 +224,6 @@ class Exchange:
         except Exception as e:
             print(f"Error placing {order_type} order on {self.exchange_name} testnet: {e}")
             return None
-
 
     def amount_to_precision(self, symbol, quantity, precision=None, rounding_mode=None):
         if symbol not in self.exchange_class.markets:
