@@ -34,6 +34,40 @@ class Exchange:
             return ccxt.bybit(exchange_options)
         elif exchange == 'coinbasepro':
             return ccxt.coinbasepro(exchange_options)
+        elif exchange == 'bitfinex':
+            return ccxt.bitfinex(exchange_options)
+        elif exchange == 'bitmex':
+            return ccxt.bitmex(exchange_options)
+        elif exchange == 'bittrex':
+            return ccxt.bittrex(exchange_options)
+        elif exchange == 'cex':
+            return ccxt.cex(exchange_options)
+        elif exchange == 'deribit':
+            return ccxt.deribit(exchange_options)
+        elif exchange == 'gateio':
+            return ccxt.gateio(exchange_options)
+        elif exchange == 'gemini':
+            return ccxt.gemini(exchange_options)
+        elif exchange == 'huobifutures':
+            return ccxt.huobifutures(exchange_options)
+        elif exchange == 'huobi':
+            return ccxt.huobipro(exchange_options)
+        elif exchange == 'kraken':
+            return ccxt.kraken(exchange_options)
+        elif exchange == 'krakenfutures':
+            return ccxt.krakenfutures(exchange_options)
+        elif exchange == 'phemex':
+            return ccxt.phemex(exchange_options)
+        elif exchange == 'bitflyer':
+            return ccxt.bitflyer(exchange_options)
+        elif exchange == 'binancecoinm':
+            return ccxt.binancecoinm(exchange_options)
+        elif exchange == 'bitdotcom':
+            return ccxt.bitdotcom(exchange_options)
+        elif exchange == 'bitbay':
+            return ccxt.bitbay(exchange_options)
+        elif exchange == 'bitmart':
+            return ccxt.bitmart(exchange_options)
         else:
             raise ValueError(f"Unsupported exchange: {exchange}")
 
