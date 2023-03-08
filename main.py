@@ -4,12 +4,19 @@ from datetime import datetime
 from flask import Markup, flash, request, Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
-from database import db
+from database import db, init_db
+from config import Config
 from classes.exchange import Exchange
 from classes.models import ExchangeModels, Bots, Accounts, Signals, Positions, Role, User, BotFees
 
 # Load Flask app
 app = Flask(__name__)
+
+# Load configuration from config file
+app.config.from_object(Config)
+
+# Initialize the db object with the Flask app
+init_db(app)
 
 # --------- setup Flask-Security ---------
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
