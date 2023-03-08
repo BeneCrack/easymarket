@@ -493,6 +493,67 @@ class Exchange:
                 'secret': api_secret,
                 'options': {'urls': urls},
             }
+        elif exchange == 'gemini':
+            if testnet:
+                raise ValueError("Gemini does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.gemini.com',
+                    'public': 'https://api.gemini.com/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'nonce': lambda: str(int(time.time() * 1000)),
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'krakenfutures':
+            if testnet:
+                urls = {
+                    'api': 'https://demo-futures.kraken.com',
+                    'public': 'https://demo-futures.kraken.com/derivatives/api/v3',
+                }
+            else:
+                urls = {
+                    'api': 'https://futures.kraken.com',
+                    'public': 'https://futures.kraken.com/derivatives/api/v3',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'nonce': lambda: str(int(time.time() * 1000)),
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'bitmart':
+            if testnet:
+                raise ValueError("BitMart does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api-cloud.bitmart.com',
+                    'public': 'https://api-cloud.bitmart.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'bitbay':
+            if testnet:
+                raise ValueError("BitBay does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.bitbay.net/rest',
+                    'public': 'https://api.bitbay.net/rest',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls},
+            }
         else:
             exchange_options = {
                 'apiKey': api_key,
