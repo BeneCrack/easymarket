@@ -237,20 +237,25 @@ def add_account():
 
         account = Accounts(name=name, exchange_id=exchange_id, api_key=api_key, api_secret=api_secret,
                            password=password, testnet=testnet)
+        account.user_id = current_user.id
+
+        db.session.add(account)
+        db.session.commit()
+
+        # Retrieve the account from the database to get the exchange short name
+        account = Accounts.query.filter_by(user_id=current_user.id).order_by(Accounts.id.desc()).first()
 
         # Save the total balance in USDT to the account
         exchange_client = get_exchange_client(account)
         total_balance = exchange_client.get_total_balance()
         account.balance_usdt = total_balance
 
-        db.session.add(account)
-        db.session.commit()
 
         flash('Account created successfully!')
         return redirect(url_for('accounts'))
     else:
         exchanges = ExchangeModels.query.all()
-        return render_template('add_account.html', exchanges=exchanges)
+        return render_template('add-account.html', exchanges=exchanges)
 
 
 @app.route('/edit/account/<int:id>', methods=['GET', 'POST'])
@@ -288,9 +293,9 @@ def delete_account(id):
 @app.route("/addexchange")
 @login_required
 def addexchange():
-    # new_exchange = Exchanges(name="Kucoin Futures Sandbox", short="kucoinfuturesusd")
-    # db.session.add(new_exchange)
-    # db.session.commit()
+    new_exchange = ExchangeModels(name="Kucoin Futures Sandbox", short="kucoinfuturesusd")
+    db.session.add(new_exchange)
+    db.session.commit()
     all_exchanges = ExchangeModels.query.all()
     return render_template("exchanges.html", exchanges=all_exchanges)
 
@@ -1066,7 +1071,8 @@ def tradingview_webhook():
 if __name__ == '__main__':
     # app.app_context().push()
     # db.drop_all()
-    # db.create_all()
+    with app.app_context():
+        db.create_all()
 
     # Accounts.__table__.columns.user_id.unique = False
     app.run(debug=True)

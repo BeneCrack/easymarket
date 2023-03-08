@@ -1,7 +1,10 @@
+import time
+
 import ccxt
 from _decimal import Decimal
 from ccxt import ExchangeError
 import decimal
+
 
 class Exchange:
     markets = {}
@@ -16,51 +19,506 @@ class Exchange:
         self.exchange_class = self.get_exchange_class()
 
     def get_exchange_class(self):
-        exchange_options = {
-            'apiKey': self.api_key,
-            'secret': self.secret,
-            'password': self.passphrase,
-            'enableRateLimit': True,
-            'options': {'adjustForTimeDifference': True}
-        }
+        exchange = self.exchange_name
+        api_key = self.api_key
+        api_secret = self.secret
+        password = self.passphrase
+        testnet = self.testnet
 
-        if self.testnet:
-            exchange_options['options']['defaultType'] = 'future'
-            exchange_options['options']['urls']['api'] = exchange_options['options']['urls']['test']
-            exchange_options['options']['urls']['www'] = exchange_options['options']['urls']['test']
+        if exchange == 'binance':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.binance.vision/api',
+                    'public': 'https://testnet.binance.vision/api/v3',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.binance.com/api',
+                    'public': 'https://api.binance.com/api/v3',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls}
+            }
+        elif exchange == 'binanceusdm':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.binancefuture.com',
+                    'public': 'https://testnet.binancefuture.com/fapi/v1',
+                }
+            else:
+                urls = {
+                    'api': 'https://fapi.binance.com',
+                    'public': 'https://fapi.binance.com/fapi/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls}
+            }
+        elif exchange == 'kucoin':
+            if testnet:
+                urls = {
+                    'api': 'https://api-sandbox.kucoin.com',
+                    'public': 'https://api-sandbox.kucoin.com/api',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.kucoin.com',
+                    'public': 'https://api.kucoin.com/api',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls}
+            }
+        elif exchange == 'kucoinfutures':
+            if testnet:
+                urls = {
+                    'api': 'https://api-futures-sandbox.kucoin.com',
+                    'public': 'https://api-futures-sandbox.kucoin.com/api/v1',
+                }
+            else:
+                urls = {
+                    'api': 'https://api-futures.kucoin.com',
+                    'public': 'https://api-futures.kucoin.com/api/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls}
+            }
+        elif exchange == 'bybit':
+            if testnet:
+                urls = {
+                    'api': 'https://api-testnet.bybit.com',
+                    'public': 'https://api-testnet.bybit.com',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.bybit.com',
+                    'public': 'https://api.bybit.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls}
+            }
+        elif exchange == 'coinbasepro':
+            if testnet:
+                urls = {
+                    'api': 'https://api-public.sandbox.pro.coinbase.com',
+                    'public': 'https://api-public.sandbox.pro.coinbase.com',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.pro.coinbase.com',
+                    'public': 'https://api.pro.coinbase.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'passphrase': password,
+                'enableRateLimit': True,
+                'options': {
+                    'urls': urls,
+                    'timeDifference': 0,
+                },
+            }
+        elif exchange == 'bitfinex':
+            if testnet:
+                raise ValueError("Bitfinex does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.bitfinex.com',
+                    'public': 'https://api-pub.bitfinex.com/v2',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls}
+            }
+        if exchange == 'bitmex':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.bitmex.com',
+                    'public': 'https://testnet.bitmex.com/api/v1',
+                }
+            else:
+                urls = {
+                    'api': 'https://www.bitmex.com',
+                    'public': 'https://www.bitmex.com/api/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+                'rateLimit': 3000,
+            }
+        if exchange == 'bittrex':
+            if testnet:
+                raise ValueError("Bittrex does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.bittrex.com/v3',
+                    'public': 'https://api.bittrex.com/v3',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+        if exchange == 'kraken':
+            if testnet:
+                raise ValueError("Kraken does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.kraken.com/0',
+                    'public': 'https://api.kraken.com/0/public',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'nonce': lambda: str(int(time.time() * 1000)),
+                'options': {'urls': urls},
+            }
+        if exchange == 'okex':
+            if testnet:
+                urls = {
+                    'api': 'https://www.okex.com',
+                    'public': 'https://www.okex.com/api/v5',
+                }
+            else:
+                urls = {
+                    'api': 'https://www.okex.com',
+                    'public': 'https://www.okex.com/api/v5',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'cex':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.cex.io',
+                    'public': 'https://testnet.cex.io',
+                }
+            else:
+                urls = {
+                    'api': 'https://cex.io',
+                    'public': 'https://cex.io',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'enableRateLimit': True,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'poloniex':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.poloniex.com',
+                    'public': 'https://testnet.poloniex.com/public',
+                }
+            else:
+                urls = {
+                    'api': 'https://poloniex.com',
+                    'public': 'https://poloniex.com/public',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'bitstamp':
+            if testnet:
+                urls = {
+                    'api': 'https://www.bitstamp.net/api/v2',
+                    'public': 'https://www.bitstamp.net/api/v2',
+                }
+            else:
+                urls = {
+                    'api': 'https://www.bitstamp.net/api/v2',
+                    'public': 'https://www.bitstamp.net/api/v2',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'enableRateLimit': True,
+                'options': {'urls': urls}
+            }
+        elif exchange == 'phemex':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet-api.phemex.com',
+                    'public': 'https://testnet-api.phemex.com',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.phemex.com',
+                    'public': 'https://api.phemex.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'bitflyer':
+            if testnet:
+                raise ValueError("bitFlyer does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.bitflyer.com/v1',
+                    'public': 'https://api.bitflyer.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'binancecoinm':
+            if testnet:
+                raise ValueError("Binance COIN-M Futures does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://dapi.binance.com',
+                    'public': 'https://dapi.binance.com/dapi/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'gateio':
+            if testnet:
+                raise ValueError("Gate.io does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.gateio.ws',
+                    'public': 'https://api.gateio.ws/api/v4',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls},
+            }
+        elif exchange == 'bitmax':
+            if testnet:
+                urls = {
+                    'api': 'https://demo-api.bitmaxpro.com',
+                    'public': 'https://demo-api.bitmaxpro.com',
+                }
+            else:
+                urls = {
+                    'api': 'https://bitmax.io',
+                    'public': 'https://bitmax.io',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls},
+            }
 
-        if self.defaultType:
-            exchange_options['options']['defaultType'] = self.defaultType
+        elif exchange == 'huobi':
+            if testnet:
+                raise ValueError("Huobi does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.huobi.pro',
+                    'public': 'https://api.huobi.pro',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
 
-        if self.exchange_name == 'binance':
-            exchange_class = ccxt.binance(exchange_options)
-            if self.testnet:
-                exchange_class.urls['api'] = exchange_class.urls['api'].replace('binance.', 'testnet.binance.')
-        elif self.exchange_name == 'kucoinfutures':
-            exchange_class = ccxt.kucoin(exchange_options)
-            if self.testnet:
-                exchange_class.urls['api'] = exchange_class.urls['api'].replace('api', 'futures-test')
-                exchange_class.urls['www'] = exchange_class.urls['www'].replace('www', 'futures-test')
-            if self.defaultType:
-                exchange_class.urls['api'] = exchange_class.urls['api'].replace('api', 'futures-api')
-                exchange_class.urls['www'] = exchange_class.urls['www'].replace('www', 'futures')
-        elif self.exchange_name == 'kucoin':
-            exchange_class = ccxt.kucoin(exchange_options)
-        elif self.exchange_name == 'bybit':
-            exchange_class = ccxt.bybit(exchange_options)
-            if self.testnet:
-                exchange_class.urls['api'] = exchange_class.urls['api'].replace('api', 'api-testnet')
-                exchange_class.urls['www'] = exchange_class.urls['www'].replace('www', 'www-testnet')
-        elif self.exchange_name == 'binanceusdm':
-            exchange_class = ccxt.binanceusdm(exchange_options)
-            if self.defaultType:
-                exchange_class.urls['api'] = exchange_class.urls['api'].replace('binance.', 'fapi.')
-        elif self.exchange_name == 'coinbasepro':
-            exchange_class = ccxt.coinbasepro(exchange_options)
+        elif exchange == 'huobifutures':
+            if testnet:
+                raise ValueError("Huobi Futures does not support testnet.")
+            else:
+                urls = {
+                    'api': 'https://api.hbdm.com',
+                    'public': 'https://api.hbdm.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'deribit':
+            if testnet:
+                urls = {
+                    'api': 'https://test.deribit.com/api/v2',
+                    'public': 'https://test.deribit.com/api/v2',
+                }
+            else:
+                urls = {
+                    'api': 'https://www.deribit.com/api/v2',
+                    'public': 'https://www.deribit.com/api/v2',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'phemexfutures':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet-api.phemex.com',
+                    'public': 'https://testnet-api.phemex.com',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.phemex.com',
+                    'public': 'https://api.phemex.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'futures':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.binancefuture.com',
+                    'public': 'https://testnet.binancefuture.com/fapi/v1',
+                }
+            else:
+                urls = {
+                    'api': 'https://fapi.binance.com',
+                    'public': 'https://fapi.binance.com/fapi/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'bitdotcom':
+            if testnet:
+                urls = {
+                    'api': 'https://testnet.bit.com',
+                    'public': 'https://testnet.bit.com',
+                }
+            else:
+                urls = {
+                    'api': 'https://bit.com',
+                    'public': 'https://bit.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'deribit':
+            if testnet:
+                urls = {
+                    'api': 'https://test.deribit.com/api/v2',
+                    'public': 'https://test.deribit.com/api/v2',
+                }
+            else:
+                urls = {
+                    'api': 'https://www.deribit.com/api/v2',
+                    'public': 'https://www.deribit.com/api/v2',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'enableRateLimit': True,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'huobi':
+            if testnet:
+                urls = {
+                    'api': 'https://api.testnet.huobi.pro',
+                    'public': 'https://api.testnet.huobi.pro/v1',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.huobi.pro',
+                    'public': 'https://api.huobi.pro/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'huobifutures':
+            if testnet:
+                urls = {
+                    'api': 'https://api.dm.testnet.huobi.pro',
+                    'public': 'https://api.dm.testnet.huobi.pro',
+                }
+            else:
+                urls = {
+                    'api': 'https://api.hbdm.com',
+                    'public': 'https://api.hbdm.com',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'options': {'urls': urls},
+            }
+
+        elif exchange == 'bitmax':
+            if testnet:
+                urls = {
+                    'api': 'https://bitmax-test.io',
+                    'public': 'https://bitmax-test.io/api/v1',
+                }
+            else:
+                urls = {
+                    'api': 'https://bitmax.io',
+                    'public': 'https://bitmax.io/api/v1',
+                }
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'options': {'urls': urls},
+            }
         else:
-            raise ValueError(f"Unsupported exchange: {self.exchange_name}")
+            exchange_options = {
+                'apiKey': api_key,
+                'secret': api_secret,
+                'password': password,
+                'enableRateLimit': True,
+                'options': {'adjustForTimeDifference': True},
+                'urls': {}
+            }
+            raise ValueError(f"Unsupported exchange specified: {exchange}")
 
-        return exchange_class
+        # Determine the exchange class
+        if exchange == 'binance':
+            return ccxt.binance(exchange_options)
+        elif exchange == 'binanceusdm':
+            return ccxt.binanceusdm(exchange_options)
+        elif exchange == 'kucoin':
+            return ccxt.kucoin(exchange_options)
+        elif exchange == 'kucoinfutures':
+            return ccxt.kucoinfuture(exchange_options)
+        elif exchange == 'bybit':
+            return ccxt.bybit(exchange_options)
+        elif exchange == 'coinbasepro':
+            return ccxt.coinbasepro(exchange_options)
+        else:
+            raise ValueError(f"Unsupported exchange: {exchange}")
 
     def get_trading_fees(self, symbol):
         try:
