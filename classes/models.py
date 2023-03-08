@@ -47,14 +47,13 @@ class BotFees(db.Model):
         return f'<BotFees for Bot {self.bot_id}>'
 
 
-class ExchangeModel(db.Model):
-    __tablename__ = 'exchanges'
+class ExchangeModels(db.Model):
+    __tablename__ = 'exchangemodels'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
     short = db.Column(db.String(64), unique=True, nullable=False)
 
-    bots = relationship('Accounts', back_populates='exchanges')
-
+    accounts = relationship('Accounts', back_populates='exchangemodels')
     def __repr__(self):
         return f'<Exchanges {self.name}>'
 
@@ -63,7 +62,7 @@ class Accounts(db.Model):
     __tablename__ = 'accounts'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchangemodels.id'), nullable=False)
     api_key = db.Column(db.String(256), nullable=False)
     api_secret = db.Column(db.String(256), nullable=False)
     password = db.Column(db.String(256), nullable=True)
@@ -74,7 +73,7 @@ class Accounts(db.Model):
     balance_total = db.Column(db.Float, nullable=True)
 
     bots = relationship('Bots', back_populates='accounts')
-    exchanges = relationship('ExchangeModel', back_populates='accounts')
+    exchanges = relationship('ExchangeModels', back_populates='accounts')
 
     def __repr__(self):
         return f'<Account {self.name}>'

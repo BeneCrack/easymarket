@@ -6,7 +6,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, U
 from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
 from database import db
 from classes.exchange import Exchange
-from classes.models import ExchangeModel, Bots, Accounts, Signals, Positions, Role, User, BotFees
+from classes.models import ExchangeModels, Bots, Accounts, Signals, Positions, Role, User, BotFees
 
 # Load Flask app
 app = Flask(__name__)
@@ -247,7 +247,7 @@ def add_account():
         flash('Account created successfully!')
         return redirect(url_for('accounts'))
     else:
-        exchanges = ExchangeModel.query.all()
+        exchanges = ExchangeModels.query.all()
         return render_template('add_account.html', exchanges=exchanges)
 
 
@@ -268,7 +268,7 @@ def edit_account(id):
         flash('Account updated successfully!', 'success')
         return redirect(url_for('accounts'))
 
-    return render_template('edit_account.html', account=account, exchanges=ExchangeModel.query.all())
+    return render_template('edit_account.html', account=account, exchanges=ExchangeModels.query.all())
 
 
 @app.route('/delete/account/<int:id>', methods=['POST'])
@@ -289,7 +289,7 @@ def addexchange():
     # new_exchange = Exchanges(name="Kucoin Futures Sandbox", short="kucoinfuturesusd")
     # db.session.add(new_exchange)
     # db.session.commit()
-    all_exchanges = ExchangeModel.query.all()
+    all_exchanges = ExchangeModels.query.all()
     return render_template("exchanges.html", exchanges=all_exchanges)
 
 
