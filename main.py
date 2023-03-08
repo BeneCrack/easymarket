@@ -134,7 +134,7 @@ def create_bot():
         # retrieve the Account object associated with the given account_id
         account = Accounts.query.filter_by(id=account_id).first()
         # retrieve the ExchangeModel id associated with the Account object
-        exchange_short = account.exchanges.short
+        exchange_short = account.exchangemodels.short
 
         # Create a new bot object
         bot = Bots(name=name, enabled=enabled, order_type=bt_type, base_order_size=amount, leverage=leverage,
@@ -353,7 +353,7 @@ def get_exchange_client(account):
     """
     Get the exchange client.
     """
-    exchange_instance = Exchange(account.exchanges.short, account.api_key, account.api_secret, account.password,
+    exchange_instance = Exchange(account.exchangemodels.short, account.api_key, account.api_secret, account.password,
                                  account.testnet)
     if account.testnet:
         exchange_instance.set_testnet()
