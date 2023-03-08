@@ -293,7 +293,7 @@ def delete_account(id):
 @app.route("/addexchange")
 @login_required
 def addexchange():
-    new_exchange = ExchangeModels(name="Kucoin Futures Sandbox", short="kucoinfuturesusd")
+    new_exchange = ExchangeModels(name="Kucoin Futures Sandbox", short="kucoinfutures")
     db.session.add(new_exchange)
     db.session.commit()
     all_exchanges = ExchangeModels.query.all()
@@ -363,7 +363,7 @@ def get_exchange_client(account):
     exchange_instance = Exchange(account.exchangemodels.short, account.api_key, account.api_secret, account.password,
                                  account.testnet)
     if account.testnet:
-        exchange_instance.set_testnet()
+        exchange_instance.set_sandbox_mode(True)
     return exchange_instance
 
 
@@ -1069,10 +1069,10 @@ def tradingview_webhook():
 
 
 if __name__ == '__main__':
-    # app.app_context().push()
-    # db.drop_all()
-    with app.app_context():
-        db.create_all()
+    #app.app_context().push()
+    #db.drop_all()
+    #with app.app_context():
+        #db.create_all()
 
     # Accounts.__table__.columns.user_id.unique = False
     app.run(debug=True)

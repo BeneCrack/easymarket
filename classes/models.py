@@ -50,7 +50,7 @@ class BotFees(db.Model):
 class ExchangeModels(db.Model):
     __tablename__ = 'exchangemodels'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(64), unique=False, nullable=False)
     short = db.Column(db.String(64), unique=True, nullable=False)
 
     accounts = relationship('Accounts', back_populates='exchangemodels')
@@ -63,7 +63,7 @@ class ExchangeModels(db.Model):
 class Accounts(db.Model):
     __tablename__ = 'accounts'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), unique=True, nullable=False)
+    name = db.Column(db.String(64), unique=False, nullable=False)
     exchange_id = db.Column(db.Integer, db.ForeignKey('exchangemodels.id'), nullable=False)
     api_key = db.Column(db.String(256), nullable=False)
     api_secret = db.Column(db.String(256), nullable=False)

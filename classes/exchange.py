@@ -29,7 +29,7 @@ class Exchange:
         elif exchange == 'kucoin':
             return ccxt.kucoin(exchange_options)
         elif exchange == 'kucoinfutures':
-            return ccxt.kucoinfuture(exchange_options)
+            return ccxt.kucoinfutures(exchange_options)
         elif exchange == 'bybit':
             return ccxt.bybit(exchange_options)
         elif exchange == 'coinbasepro':
@@ -141,21 +141,10 @@ class Exchange:
                 'options': {'urls': urls}
             }
         elif exchange == 'kucoinfutures':
-            if testnet:
-                urls = {
-                    'api': 'https://api-futures-sandbox.kucoin.com',
-                    'public': 'https://api-futures-sandbox.kucoin.com/api/v1',
-                }
-            else:
-                urls = {
-                    'api': 'https://api-futures.kucoin.com',
-                    'public': 'https://api-futures.kucoin.com/api/v1',
-                }
             exchange_options = {
                 'apiKey': api_key,
                 'secret': api_secret,
-                'password': password,
-                'options': {'urls': urls}
+                'password': password
             }
         elif exchange == 'bybit':
             if testnet:
@@ -588,6 +577,7 @@ class Exchange:
                 'urls': {}
             }
             raise ValueError(f"Unsupported exchange specified: {exchange}")
+        print(exchange_options)
         return exchange_options
 
     def get_trading_fees(self, symbol):
@@ -637,6 +627,7 @@ class Exchange:
 
     def set_testnet(self):
         self.testnet = True
+        self.exchange_class.set_sandbox_mode(True)
         return False
 
     def get_balance(self, currency):
