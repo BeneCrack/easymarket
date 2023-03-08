@@ -11,11 +11,6 @@ from classes.models import ExchangeModels, Bots, Accounts, Signals, Positions, R
 # Load Flask app
 app = Flask(__name__)
 
-# Load configuration from environment variable
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///easymarket.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'super-secret-key'
-
 # --------- setup Flask-Security ---------
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
 security = Security(app, user_datastore)
