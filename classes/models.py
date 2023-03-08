@@ -4,10 +4,9 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
-
 roles_users = db.Table('roles_users',
-        db.Column('user_id', db.Integer(), db.ForeignKey('user.id')),
-        db.Column('role_id', db.Integer(), db.ForeignKey('role.id')))
+                       db.Column('user_id', db.Integer(), db.ForeignKey('user.id')),
+                       db.Column('role_id', db.Integer(), db.ForeignKey('role.id')))
 
 
 class Bots(db.Model):
@@ -36,6 +35,7 @@ class Bots(db.Model):
     def __repr__(self):
         return f'<Bot {self.name}>'
 
+
 class BotFees(db.Model):
     __tablename__ = 'botfees'
     id = db.Column(db.Integer, primary_key=True)
@@ -54,6 +54,7 @@ class ExchangeModels(db.Model):
     short = db.Column(db.String(64), unique=True, nullable=False)
 
     accounts = relationship('Accounts', back_populates='exchangemodels')
+
     def __repr__(self):
         return f'<Exchanges {self.name}>'
 
@@ -62,7 +63,7 @@ class Accounts(db.Model):
     __tablename__ = 'accounts'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=True, nullable=False)
-    exchange_id = db.Column(db.Integer, db.ForeignKey('exchangemodels.id'), nullable=False)
+    exchange_id = db.Column(db.Integer, db.ForeignKey('exchanges.id'), nullable=False)
     api_key = db.Column(db.String(256), nullable=False)
     api_secret = db.Column(db.String(256), nullable=False)
     password = db.Column(db.String(256), nullable=True)
@@ -90,7 +91,7 @@ class Signals(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     bots = relationship('Bots', back_populates='signals')
-    exchanges = relationship('Exchanges')
+    exchanges = relationship('ExchangeModels')
 
     def __repr__(self):
         return f'<Signal {self.signal_type} {self.symbol}>'
@@ -120,7 +121,7 @@ class Positions(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     bots = relationship('Bots', back_populates='positions')
-    exchanges = relationship('Exchanges', back_populates='positions')
+    exchanges = relationship('ExchangeModels', back_populates='positions')
 
     def save(self):
         db.session.add(self)
@@ -153,6 +154,7 @@ class User(db.Model, UserMixin):
 
     roles = db.relationship('Role', secondary=roles_users,
                             backref=db.backref('users', lazy='dynamic'))
+
     def set_password(self, password):
         self.password = generate_password_hash(password)
 
