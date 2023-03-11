@@ -1,5 +1,3 @@
-import time
-
 import ccxt
 from _decimal import Decimal
 from ccxt import ExchangeError
@@ -20,6 +18,7 @@ class Exchange(ccxt.Exchange):
         self.exchange_class = self.get_exchange_class()
 
     def get_exchange_class(self):
+        print("here")
         exchange = self.exchange_name
         exchange_options = self.build_exchange_options()
 
@@ -79,7 +78,7 @@ class Exchange(ccxt.Exchange):
         self.set_sandbox_mode(self.testnet)
         print(self.urls)
         exchange_class.load_markets()
-
+        print(exchange_class)
         return exchange_class
 
     def build_exchange_options(self):
@@ -680,6 +679,8 @@ class Exchange(ccxt.Exchange):
         return balance
 
     def get_total_balance(self):
+        print(self.urls)
+        print('self.urls')
         # Retrieve the balance for all currencies in the exchange
         balance = self.exchange_class.fetch_balance()
 

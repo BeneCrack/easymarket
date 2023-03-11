@@ -339,9 +339,11 @@ def get_total_account_balance(account_id):
     GET TOTAL PORTFOLIO VALUE OF ACCOUNT
     """
     account = Accounts.query.filter_by(id=account_id).first()
-
+    print(account)
     exchange_client = get_exchange_client(account)
     # Load balance
+    print("345")
+    print(exchange_client)
     account.balance_total = exchange_client.get_total_balance()
     db.session.commit()
     # Return the available pairs as a JSON response
@@ -366,6 +368,7 @@ def get_exchange_client(account):
     """
     Get the exchange client.
     """
+    print("371")
     exchange_instance = Exchange(account.exchangemodels.short, account.api_key, account.api_secret, account.password,
                                  account.testnet)
     return exchange_instance
