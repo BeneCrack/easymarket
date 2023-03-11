@@ -128,7 +128,7 @@
                             <select
                               class="w-full py-4 appearance-none bg-transparent outline-none"
                               id="account"
-                              name="account_id"
+                              name="account"
                             >
                               <option value="">Select an account</option>
                               {% for account in accounts %}
@@ -409,20 +409,20 @@
                                 const pair = $('#pair').val();
 
                                 // Make an AJAX request to load the available leverage
-                                $.getJSON(`/load/leverage/${exchange}/${pair}`, function(leverage) {
+                                $.getJSON(`/load/leverage/${exchange}/${pair.replace('/', '-')}`, function(leverage) {
                                   // Populate the leverage dropdown with the returned data
                                   $('#leverage').empty();
-                                  pairDropdown.append('<option value="">-- Select a Leverage --</option>');
+                                  $('#leverage').append('<option value="">-- Select a Leverage --</option>');
                                   $.each(leverage, function(index, value) {
-                                    $('#leverage').append($('<option>').text(value).attr('value', value));
+                                    $('#leverage').append($('<option>').text(value).attr('value', value.replace('x', '')));
                                   });
                                 });
 
                                 // Make an AJAX request to load available timeframes
-                                $.getJSON(`/load/leverage/${exchange}/${pair}`, function(time_interval) {
+                                $.getJSON(`/load/intervals/${exchange}/${pair.replace('/', '-')}`, function(time_interval) {
                                   // Populate the leverage dropdown with the returned data
                                   $('#time_interval').empty();
-                                  pairDropdown.append('<option value="">-- Select a time_interval --</option>');
+                                  $('#time_interval').append('<option value="">-- Select a time_interval --</option>');
                                   $.each(time_interval, function(index, value) {
                                     $('#time_interval').append($('<option>').text(value).attr('value', value));
                                   });

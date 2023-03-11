@@ -13,6 +13,7 @@ class Bots(db.Model):
     __tablename__ = 'bots'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(64), unique=False, nullable=False)
+    enabled = db.Column(db.Boolean(), nullable=False)
     order_type = db.Column(db.String(10), nullable=False)
     base_order_size = db.Column(db.Float, nullable=False)
     leverage = db.Column(db.Float, nullable=True)

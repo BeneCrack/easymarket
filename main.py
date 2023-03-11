@@ -123,15 +123,22 @@ def create_bot():
         name = request.form['name']
         enabled = bool(request.form.get("enabled"))
         pair = request.form["pair"]
-        amount = request.form["amount"]
+        amount = float(request.form["amount"])
         description = request.form['description']
         time_interval = request.form['time_interval']
         account_id = request.form['account']
         bt_type = request.form["type"]
         user_id = current_user.id
-        leverage = request.form["leverage"]
-        take_profit = request.form["take_profit"]
-        stop_loss = request.form["stop_loss"]
+        leverage = float(request.form["leverage"])
+
+        try:
+            take_profit = float(request.form["take_profit"])
+        except ValueError:
+            take_profit = 0.0  # or some other default value
+        try:
+            stop_loss = float(request.form["stop_loss"])
+        except ValueError:
+            stop_loss = 0.0  # or some other default value
 
         # retrieve the Account object associated with the given account_id
         account = Accounts.query.filter_by(id=account_id).first()
@@ -142,27 +149,27 @@ def create_bot():
         bot = Bots(name=name, enabled=enabled, order_type=bt_type, base_order_size=amount, leverage=leverage,
                    exchange=exchange_short, symbol=pair,
                    take_profit=take_profit, stop_loss=stop_loss, description=description, time_interval=time_interval,
-                   user_id=user_id,
-                   account_id=account_id)
+                   user_id=user_id, exchange_id=account.exchange_id, account_id=account_id)
 
-        # Get the exchange associated with the selected account
-        account = Accounts.query.filter_by(id=account_id).first()
+        db.session.add(bot)
+        db.session.commit()
+        bot = Bots.query.filter_by(user_id=current_user.id).first()
+
         exchange_model = get_exchange_client(account)
 
         # Load Fees
         maker_fee, taker_fee = exchange_model.get_trading_fees(pair)
 
-        bot_fees = BotFees(bot=bot, maker_fee=maker_fee, taker_fee=taker_fee)
+        bot_fees = BotFees(bot_id=bot.id, maker_fee=maker_fee, taker_fee=taker_fee)
 
         db.session.add(bot_fees)
-        db.session.add(bot)
         db.session.commit()
 
         flash('Bot created successfully!')
         return redirect(url_for('bots'))
     else:
-        accounts = Accounts.query.filter_by(user_id=current_user.id).all()
-        return render_template('create_bot.html', accounts=accounts)
+        account = Accounts.query.filter_by(user_id=current_user.id).all()
+        return render_template('create-bot.html', accounts=account)
 
 
 @app.route('/edit/bot/<int:id>', methods=['GET', 'POST'])
@@ -250,7 +257,6 @@ def add_account():
         total_balance = exchange_client.get_total_balance()
         account.balance_usdt = total_balance
 
-
         flash('Account created successfully!')
         return redirect(url_for('accounts'))
     else:
@@ -275,7 +281,7 @@ def edit_account(id):
         flash('Account updated successfully!', 'success')
         return redirect(url_for('accounts'))
 
-    return render_template('edit_account.html', account=account, exchanges=ExchangeModels.query.all())
+    return render_template('edit-account.html', account=account, exchanges=ExchangeModels.query.all())
 
 
 @app.route('/delete/account/<int:id>', methods=['POST'])
@@ -362,8 +368,6 @@ def get_exchange_client(account):
     """
     exchange_instance = Exchange(account.exchangemodels.short, account.api_key, account.api_secret, account.password,
                                  account.testnet)
-    if account.testnet:
-        exchange_instance.set_sandbox_mode(True)
     return exchange_instance
 
 
@@ -902,35 +906,38 @@ def load_pairs(account_id):
         # Load markets
         try:
             markets = exchange_model.load_markets()
+            print(markets)
         except Exception as e:
             return f'Error loading markets: {e}'
 
         # Extract the market symbols and sort them alphabetically
-        pairs = sorted([symbol for symbol in markets.keys()])
-        # Convert pairs to a JSON-formatted string
-        pairs_json = json.dumps(pairs)
+        pairs = sorted([symbol.split(":")[0] for symbol in markets.keys()])
+
         # Return the available pairs as a JSON response
-        return pairs_json
+        return jsonify(pairs)
     else:
         print(f"No account found with id {account_id}")
 
 
-@app.route('/load/leverage/<int:account_id>/<string:pair>')
-def load_leverage(account_id, pair):
+@app.route('/load/leverage/<int:account_id>/<string:symbol>')
+def load_leverage(account_id, symbol):
     # Get the exchange associated with the selected account
     account = Accounts.query.filter_by(id=account_id).first()
-    exchange = get_exchange_client(account)
-    if exchange is not None:
+    exchange_client = get_exchange_client(account)
+    print("we here")
+    if exchange_client is not None:
         # Load Leverage
         try:
-            leverage = exchange.get_available_leverage(pair)
+            print("we here1")
+            symbolnew = symbol.replace('-', '/')
+            leverage = exchange_client.get_available_leverage(symbolnew + ":" + symbolnew.split("/")[1].split(":")[0])
         except Exception as e:
             return f'Error loading leverage: {e}'
 
         # Return the available pairs as a JSON response
         return jsonify(leverage)
     else:
-        print(f"No account found with id {exchange}")
+        print(f"No account found with id {exchange_client}")
 
 
 @app.route('/load/intervals/<int:account_id>/<string:symbol>')
@@ -941,12 +948,13 @@ def load_intervals(account_id, symbol):
     if exchange_client is not None:
         # Load Leverage
         try:
-            time_intervals = exchange_client.get_time_intervals()
+            symbolnew = symbol.replace('-', '/')
+            time_intervals = exchange_client.get_time_intervals(symbolnew + ":" + symbolnew.split("/")[1].split(":")[0])
         except Exception as e:
             return f'Error loading time_intervals: {e}'
 
         # Return the available pairs as a JSON response
-        return jsonify(time_intervals)
+        return list(time_intervals)
     else:
         print(f"No account found with id {account_id}")
 
@@ -989,7 +997,8 @@ def tradingview_webhook():
             else:
                 price = None
 
-            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'long', bot.order_type, price)
+            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'long', bot.order_type,
+                                                price)
             order = create_long_order(exchange_client, bot, quantity, price)
 
             if not order:
@@ -1031,7 +1040,8 @@ def tradingview_webhook():
                 price = bot.price
             else:
                 price = None
-            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'short', bot.order_type, price)
+            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'short', bot.order_type,
+                                                price)
             order = create_short_order(exchange_client, bot, quantity, price)
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
@@ -1069,10 +1079,10 @@ def tradingview_webhook():
 
 
 if __name__ == '__main__':
-    #app.app_context().push()
-    #db.drop_all()
-    #with app.app_context():
-        #db.create_all()
+    # app.app_context().push()
+    # db.drop_all()
+    # with app.app_context():
+    # db.create_all()
 
     # Accounts.__table__.columns.user_id.unique = False
     app.run(debug=True)

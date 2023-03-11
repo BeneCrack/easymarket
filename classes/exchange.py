@@ -6,7 +6,7 @@ from ccxt import ExchangeError
 import decimal
 
 
-class Exchange:
+class Exchange(ccxt.Exchange):
     markets = {}
 
     def __init__(self, exchange_name, api_key=None, secret=None, passphrase=None, testnet=False, defaultType=None):
@@ -16,68 +16,78 @@ class Exchange:
         self.passphrase = passphrase
         self.testnet = testnet
         self.defaultType = defaultType
+        self.urls = None
         self.exchange_class = self.get_exchange_class()
 
     def get_exchange_class(self):
         exchange = self.exchange_name
         exchange_options = self.build_exchange_options()
+
+        print(exchange_options)
         # Determine the exchange class
         if exchange == 'binance':
-            return ccxt.binance(exchange_options)
+            exchange_class = ccxt.binance(exchange_options)
         elif exchange == 'binanceusdm':
-            return ccxt.binanceusdm(exchange_options)
+            exchange_class = ccxt.binanceusdm(exchange_options)
         elif exchange == 'kucoin':
-            return ccxt.kucoin(exchange_options)
+            exchange_class = ccxt.kucoin(exchange_options)
         elif exchange == 'kucoinfutures':
-            return ccxt.kucoinfutures(exchange_options)
+            exchange_class = ccxt.kucoinfutures(exchange_options)
         elif exchange == 'bybit':
-            return ccxt.bybit(exchange_options)
+            exchange_class = ccxt.bybit(exchange_options)
         elif exchange == 'coinbasepro':
-            return ccxt.coinbasepro(exchange_options)
+            exchange_class = ccxt.coinbasepro(exchange_options)
         elif exchange == 'bitfinex':
-            return ccxt.bitfinex(exchange_options)
+            exchange_class = ccxt.bitfinex(exchange_options)
         elif exchange == 'bitmex':
-            return ccxt.bitmex(exchange_options)
+            exchange_class = ccxt.bitmex(exchange_options)
         elif exchange == 'bittrex':
-            return ccxt.bittrex(exchange_options)
+            exchange_class = ccxt.bittrex(exchange_options)
         elif exchange == 'cex':
-            return ccxt.cex(exchange_options)
+            exchange_class = ccxt.cex(exchange_options)
         elif exchange == 'deribit':
-            return ccxt.deribit(exchange_options)
+            exchange_class = ccxt.deribit(exchange_options)
         elif exchange == 'gateio':
-            return ccxt.gateio(exchange_options)
+            exchange_class = ccxt.gateio(exchange_options)
         elif exchange == 'gemini':
-            return ccxt.gemini(exchange_options)
+            exchange_class = ccxt.gemini(exchange_options)
         elif exchange == 'huobifutures':
-            return ccxt.huobifutures(exchange_options)
+            exchange_class = ccxt.huobifutures(exchange_options)
         elif exchange == 'huobi':
-            return ccxt.huobipro(exchange_options)
+            exchange_class = ccxt.huobipro(exchange_options)
         elif exchange == 'kraken':
-            return ccxt.kraken(exchange_options)
+            exchange_class = ccxt.kraken(exchange_options)
         elif exchange == 'krakenfutures':
-            return ccxt.krakenfutures(exchange_options)
+            exchange_class = ccxt.krakenfutures(exchange_options)
         elif exchange == 'phemex':
-            return ccxt.phemex(exchange_options)
+            exchange_class = ccxt.phemex(exchange_options)
         elif exchange == 'bitflyer':
-            return ccxt.bitflyer(exchange_options)
+            exchange_class = ccxt.bitflyer(exchange_options)
         elif exchange == 'binancecoinm':
-            return ccxt.binancecoinm(exchange_options)
+            exchange_class = ccxt.binancecoinm(exchange_options)
         elif exchange == 'bitdotcom':
-            return ccxt.bitdotcom(exchange_options)
+            exchange_class = ccxt.bitdotcom(exchange_options)
         elif exchange == 'bitbay':
-            return ccxt.bitbay(exchange_options)
+            exchange_class = ccxt.bitbay(exchange_options)
         elif exchange == 'bitmart':
-            return ccxt.bitmart(exchange_options)
+            exchange_class = ccxt.bitmart(exchange_options)
         else:
-            raise ValueError(f"Unsupported exchange: {exchange}")
+            exchange_class = ccxt.kucoinfutures(exchange_options)
+
+        self.urls = exchange_class.urls
+        print(self.api_key)
+        self.set_sandbox_mode(self.testnet)
+        print(self.urls)
+        exchange_class.load_markets()
+
+        return exchange_class
 
     def build_exchange_options(self):
-        exchange = self.exchange_name
         api_key = self.api_key
         api_secret = self.secret
         password = self.passphrase
-        testnet = self.testnet
 
+        """
         if exchange == 'binance':
             if testnet:
                 urls = {
@@ -141,10 +151,33 @@ class Exchange:
                 'options': {'urls': urls}
             }
         elif exchange == 'kucoinfutures':
+            urls = {
+                'logo': 'https://user-images.githubusercontent.com/1294454/147508995-9e35030a-d046-43a1-a006-6fabd981b554.jpg',
+                'doc': [
+                    'https://docs.kucoin.com/futures',
+                    'https://docs.kucoin.com',
+                ],
+                'www': 'https://futures.kucoin.com/',
+                'referral': 'https://futures.kucoin.com/?rcode=E5wkqe',
+                'api': {
+                    'public': 'https://openapi-v2.kucoin.com',
+                    'private': 'https://openapi-v2.kucoin.com',
+                    'futuresPrivate': 'https://api-futures.kucoin.com',
+                    'futuresPublic': 'https://api-futures.kucoin.com',
+                    'webFront': 'https://futures.kucoin.com/_api/web-front',
+                },
+                'test': {
+                    'public': 'https://openapi-sandbox.kucoin.com',
+                    'private': 'https://openapi-sandbox.kucoin.com',
+                    'futuresPrivate': 'https://api-sandbox-futures.kucoin.com',
+                    'futuresPublic': 'https://api-sandbox-futures.kucoin.com',
+                },
+            }
             exchange_options = {
                 'apiKey': api_key,
                 'secret': api_secret,
-                'password': password
+                'password': password,
+                'options': {'urls': urls}
             }
         elif exchange == 'bybit':
             if testnet:
@@ -567,17 +600,14 @@ class Exchange:
                 'password': password,
                 'options': {'urls': urls},
             }
-        else:
-            exchange_options = {
-                'apiKey': api_key,
-                'secret': api_secret,
-                'password': password,
-                'enableRateLimit': True,
-                'options': {'adjustForTimeDifference': True},
-                'urls': {}
-            }
-            raise ValueError(f"Unsupported exchange specified: {exchange}")
-        print(exchange_options)
+            """
+        exchange_options = {
+            'apiKey': api_key,
+            'secret': api_secret,
+            'password': password,
+            'enableRateLimit': True,
+            'options': {'adjustForTimeDifference': True},
+        }
         return exchange_options
 
     def get_trading_fees(self, symbol):
@@ -592,14 +622,20 @@ class Exchange:
 
     def get_available_leverage(self, symbol):
         # Check if testnet is supported for the exchange
+        print("we here2")
         if self.testnet:
-            if hasattr(self.exchange_class, 'futures_get_leverage_brackets'):
-                # Load leverage information for the testnet exchange
-                leverage_info = self.exchange_class.futures_get_leverage_brackets(symbol)
-                return [float(level['initialLeverage']) for level in leverage_info]
-            else:
-                # Testnet not supported for this exchange, return None
-                return None
+            if hasattr(self.exchange_class, 'fetch_markets'):
+                # Load markets information for the testnet exchange
+                markets = self.exchange_class.fetch_markets()
+                market = next((m for m in markets if m['symbol'] == symbol), None)
+                if market:
+                    print(market)
+                    print("market")
+                    max_leverage = int(market['limits']['leverage']['max'])
+                    print(max_leverage)
+                    return ['{}x'.format(i) for i in [1, 3, 5, 10, 15, 20, 30, 40, 50, 60, 100, 150, 200] if i <= max_leverage]
+            # Testnet not supported for this exchange, return None
+            return None
         else:
             # Load leverage information for the live exchange
             leverage_info = self.exchange_class.futures_get_leverage_brackets(symbol)
@@ -616,18 +652,18 @@ class Exchange:
 
         return Exchange.markets
 
-    def get_time_intervals(self):
+    def get_time_intervals(self, symbol):
         timeframes = None
         try:
             self.exchange_class.load_markets()
-            timeframes = self.exchange_class.timeframes.keys()
+
+            #timeframes = [tf for tf in self.exchange_class.timeframes.keys() if market['quote'] in tf]
         except ccxt.ExchangeError as e:
             print(f"Error loading timeframes for {self.exchange_name}: {e}")
-        return timeframes
+        return self.exchange_class.timeframes.keys()
 
     def set_testnet(self):
         self.testnet = True
-        self.exchange_class.set_sandbox_mode(True)
         return False
 
     def get_balance(self, currency):
