@@ -3,20 +3,35 @@ from _decimal import Decimal
 from ccxt import ExchangeError
 import decimal
 
-
 class Exchange(ccxt.Exchange):
     markets = {}
+    instances = {}
 
-    def __init__(self, exchange_name, api_key=None, secret=None, passphrase=None, testnet=False, defaultType=None):
-        self.exchange_name = exchange_name
-        self.api_key = api_key
-        self.secret = secret
-        self.passphrase = passphrase
-        self.testnet = testnet
-        self.defaultType = defaultType
+    def __new__(self, account):
+        """
+        Creates a new instance of the Exchange class if it does not exist, otherwise returns an existing instance.
+        """
+        id = account.id
+        if id not in self.instances:
+            self.instances[id] = super().__new__(self)
+        return self.instances[id]
+
+    def __init__(self, account):
+        self.exchange_name = account.exchanemodels.short
+        self.api_key = account.api_key
+        self.secret = account.api_secret
+        self.passphrase = account.password
+        self.testnet = account.testnet
         self.urls = None
-        self.exchange_class = self.get_exchange_class()
+        self.exchange_class = getattr(ccxt, self.exchange_name)
 
+        exchange_options = self.build_exchange_options()
+
+        self.exchange_instance = self.exchange_class(exchange_options)
+        self.urls = self.exchange_instance.urls
+        self.set_sandbox_mode(self.testnet)
+
+    """
     def get_exchange_class(self):
         print("here")
         exchange = self.exchange_name
@@ -80,7 +95,7 @@ class Exchange(ccxt.Exchange):
         exchange_class.load_markets()
         print(exchange_class)
         return exchange_class
-
+    """
     def build_exchange_options(self):
         api_key = self.api_key
         api_secret = self.secret
@@ -611,7 +626,7 @@ class Exchange(ccxt.Exchange):
 
     def get_trading_fees(self, symbol):
         try:
-            fees = self.exchange_class.fetch_trading_fees(symbol)
+            fees = self.exchange_instance.fetch_trading_fees(symbol)
             maker_fee = fees['maker']
             taker_fee = fees['taker']
             return maker_fee, taker_fee
@@ -623,9 +638,9 @@ class Exchange(ccxt.Exchange):
         # Check if testnet is supported for the exchange
         print("we here2")
         if self.testnet:
-            if hasattr(self.exchange_class, 'fetch_markets'):
+            if hasattr(self.exchange_instance, 'fetch_markets'):
                 # Load markets information for the testnet exchange
-                markets = self.exchange_class.fetch_markets()
+                markets = self.exchange_instance.fetch_markets()
                 market = next((m for m in markets if m['symbol'] == symbol), None)
                 if market:
                     print(market)
@@ -637,15 +652,14 @@ class Exchange(ccxt.Exchange):
             return None
         else:
             # Load leverage information for the live exchange
-            leverage_info = self.exchange_class.futures_get_leverage_brackets(symbol)
+            leverage_info = self.exchange_instance.futures_get_leverage_brackets(symbol)
             return [float(level['initialLeverage']) for level in leverage_info]
 
     def load_markets(self):
         """Load all available markets for the exchange."""
         if not Exchange.markets:
-            exchange_client = self.get_exchange_class()
             try:
-                Exchange.markets = exchange_client.load_markets()
+                Exchange.markets = self.exchange_instance.load_markets()
             except ccxt.ExchangeError as e:
                 raise ExchangeError(f"Error loading markets for {self.exchange_name}: {e}")
 
@@ -654,24 +668,24 @@ class Exchange(ccxt.Exchange):
     def get_time_intervals(self, symbol):
         timeframes = None
         try:
-            self.exchange_class.load_markets()
+            self.exchange_instance.load_markets()
 
-            #timeframes = [tf for tf in self.exchange_class.timeframes.keys() if market['quote'] in tf]
+            #timeframes = [tf for tf in self.exchange_instance.timeframes.keys() if market['quote'] in tf]
         except ccxt.ExchangeError as e:
             print(f"Error loading timeframes for {self.exchange_name}: {e}")
-        return self.exchange_class.timeframes.keys()
+        return self.exchange_instance.timeframes.keys()
 
     def set_testnet(self):
         self.testnet = True
         return False
 
     def get_balance(self, currency):
-        balance = self.exchange_class.fetch_balance()[currency]
+        balance = self.exchange_instance.fetch_balance()[currency]
         return balance['free']
 
     # Fetch the account balance
     def fetch_balance(self, type='trading', currency=None):
-        balance = self.exchange_class.fetch_balance()
+        balance = self.exchange_instance.fetch_balance()
         if type:
             balance = balance[type]
         if currency:
@@ -682,13 +696,13 @@ class Exchange(ccxt.Exchange):
         print(self.urls)
         print('self.urls')
         # Retrieve the balance for all currencies in the exchange
-        balance = self.exchange_class.fetch_balance()
+        balance = self.exchange_instance.fetch_balance()
 
         # Calculate the total value in USDT
         usdt_value = 0.0
         for currency in balance:
             if currency != 'USDT':
-                ticker = self.exchange_class.fetch_ticker(f"{currency}/USDT")
+                ticker = self.exchange_instance.fetch_ticker(f"{currency}/USDT")
                 usdt_value += balance[currency] * ticker['last']
             else:
                 usdt_value += balance[currency]
@@ -697,7 +711,7 @@ class Exchange(ccxt.Exchange):
 
     def get_usdt_balance(self):
         # Retrieve the balance for all currencies in the account
-        balance = self.exchange_class.fetch_balance()
+        balance = self.exchange_instance.fetch_balance()
 
         # Calculate the available USDT balance
         if 'USDT' in balance:
@@ -709,19 +723,19 @@ class Exchange(ccxt.Exchange):
 
     def get_ticker(self, symbol):
         try:
-            return self.exchange_class.fetch_ticker(symbol)
+            return self.exchange_instance.fetch_ticker(symbol)
         except Exception as e:
             print(f"Error getting ticker for {symbol}: {e}")
             return None
 
     def get_ticker_price(self, symbol):
-        ticker = self.exchange_class.fetch_ticker(symbol)
+        ticker = self.exchange_instance.fetch_ticker(symbol)
         return ticker['last'] if ticker else None
 
     def create_limit_order(self, symbol, side, amount, price):
         order = None
         try:
-            order = self.exchange_class.create_order(symbol, 'limit', side, amount, price)
+            order = self.exchange_instance.create_order(symbol, 'limit', side, amount, price)
         except Exception as e:
             print(f"Failed to create limit order: {e}")
         return order
@@ -729,7 +743,7 @@ class Exchange(ccxt.Exchange):
     def create_market_order(self, symbol, side, amount):
         order = None
         try:
-            order = self.exchange_class.create_order(symbol, 'market', side, amount)
+            order = self.exchange_instance.create_order(symbol, 'market', side, amount)
         except Exception as e:
             print(f"Failed to create market order: {e}")
         return order
@@ -737,7 +751,7 @@ class Exchange(ccxt.Exchange):
     def cancel_order(self, symbol, order_id):
         exchange_order = None
         try:
-            exchange_order = self.exchange_class.cancel_order(order_id, symbol=symbol)
+            exchange_order = self.exchange_instance.cancel_order(order_id, symbol=symbol)
             # if exchange_order:
             # order = self.session.query(Positions).filter_by(exchange=self.exchange_name, order_id=exchange_order['id']).first()
             # if order:
@@ -750,7 +764,7 @@ class Exchange(ccxt.Exchange):
     def get_order_status(self, symbol, order_id):
         status = None
         try:
-            exchange_order = self.exchange_class.fetch_order(order_id, symbol=symbol)
+            exchange_order = self.exchange_instance.fetch_order(order_id, symbol=symbol)
             status = exchange_order['status'] if exchange_order else None
         except Exception as e:
             print(f"Error getting order status on {self.exchange_name}: {e}")
@@ -761,7 +775,7 @@ class Exchange(ccxt.Exchange):
             order_params = {'type': order_type, 'side': side, 'symbol': symbol, 'amount': amount}
             if price:
                 order_params['price'] = price
-            response = self.exchange_class.create_order(**order_params)
+            response = self.exchange_instance.create_order(**order_params)
             return response
         except Exception as e:
             print(f"Error placing {order_type} order on {self.exchange_name}: {e}")
@@ -775,17 +789,17 @@ class Exchange(ccxt.Exchange):
             order_params = {'type': order_type, 'side': side, 'symbol': symbol, 'amount': amount}
             if price:
                 order_params['price'] = price
-            response = self.exchange_class.create_order(**order_params)
+            response = self.exchange_instance.create_order(**order_params)
             return response
         except Exception as e:
             print(f"Error placing {order_type} order on {self.exchange_name} testnet: {e}")
             return None
 
     def amount_to_precision(self, symbol, quantity, precision=None, rounding_mode=None):
-        if symbol not in self.exchange_class.markets:
+        if symbol not in self.exchange_instance.markets:
             raise ValueError(f"{symbol} not found in markets dictionary. Please call load_markets() first.")
         if precision is None:
-            precision = self.exchange_class.markets[symbol]['precision']['amount']
+            precision = self.exchange_instance.markets[symbol]['precision']['amount']
         if rounding_mode is None:
             rounding_mode = decimal.ROUND_HALF_UP
         return Decimal(str(quantity)).quantize(Decimal(str(precision)), rounding=rounding_mode)

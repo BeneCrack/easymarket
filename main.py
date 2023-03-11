@@ -369,8 +369,7 @@ def get_exchange_client(account):
     Get the exchange client.
     """
     print("371")
-    exchange_instance = Exchange(account.exchangemodels.short, account.api_key, account.api_secret, account.password,
-                                 account.testnet)
+    exchange_instance = Exchange(account)
     return exchange_instance
 
 
