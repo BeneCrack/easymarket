@@ -340,9 +340,8 @@ def get_total_account_balance(account_id):
     """
     account = Accounts.query.filter_by(id=account_id).first()
     print(account)
-    exchange_client = get_exchange_client(account)
+    exchange_client = Exchange(account)
     # Load balance
-    print("345")
     print(exchange_client)
     account.balance_total = exchange_client.get_total_balance()
     db.session.commit()
