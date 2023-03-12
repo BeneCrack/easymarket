@@ -8,26 +8,25 @@ class Exchange(ccxt.Exchange):
     markets = {}
     instances = {}
 
+    def __new__(cls, account):
+        """
+        Creates a new instance of the Exchange class if it does not exist, otherwise returns an existing instance.
+        """
+        account_id = account.id
+        if account_id not in cls.instances:
+            cls.instances[account_id] = super().__new__(cls)
+        return cls.instances[account_id]
+
     def __init__(self, account):
+        super().__init__()
         self.account_id = account.id
-        exchange_name = account.exchangemodels.short
+        self.exchange_name = account.exchangemodels.short
         self.api_key = account.api_key
         self.secret = account.api_secret
         self.passphrase = account.password
         self.testnet = bool(account.testnet)
         self.urls = {}  # initialize urls to an empty dictionary
-        exchange_options = self.build_exchange_options()
-
-        if account.id not in Exchange.instances:
-            exchange_class = getattr(ccxt, exchange_name)
-            exchange_instance = exchange_class(exchange_options)
-            self.urls = exchange_instance.urls
-            self.set_sandbox_mode(self.testnet)
-            self.exchange_instance = exchange_instance
-            self.load_markets()
-            Exchange.instances[account.id] = self.exchange_instance
-        else:
-            self.exchange_instance = Exchange.instances[account.id]
+        self.exchange_instance = self.get_instance()
 
     """
     def get_exchange_class(self):
@@ -95,11 +94,21 @@ class Exchange(ccxt.Exchange):
         return exchange_class
     """
 
-    def build_exchange_options(self):
-        api_key = self.api_key
-        api_secret = self.secret
-        password = self.passphrase
+    def get_instance(self):
+        print(self.account_id)
+        #if self.account_id not in Exchange.instances:
+            #print("hereaaaaaaaa")
+            #Exchange.instances[self.account_id] = getattr(ccxt, self.exchange_name)(self.build_exchange_options())
+        if self.account_id in Exchange.instances:
+            return Exchange.instances[self.account_id]
 
+        Exchange.instances[self.account_id] = getattr(ccxt, self.exchange_name)(self.build_exchange_options())
+        self.urls = self.exchange_instance.urls
+        self.exchange_instance.set_sandbox_mode(self.testnet)
+        self.load_markets()
+        return Exchange.instances[self.account_id]
+
+    def build_exchange_options(self):
         """
         if exchange == 'binance':
             if testnet:
@@ -615,13 +624,12 @@ class Exchange(ccxt.Exchange):
             }
             """
         exchange_options = {
-            'apiKey': api_key,
-            'secret': api_secret,
-            'password': password,
+            'apiKey': self.api_key,
+            'secret': self.secret,
+            'password': self.passphrase,
             'enableRateLimit': True,
             'options': {'adjustForTimeDifference': True, 'defaultType': 'future'},
         }
-
         return exchange_options
 
     def get_trading_fees(self, symbol):
