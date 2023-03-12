@@ -254,7 +254,7 @@ def add_account():
 
         # Save the total balance in USDT to the account
         exchange_client = get_exchange_client(account)
-        total_balance = exchange_client.get_total_balance()
+        total_balance = exchange_client.get_usdt_balance
         account.balance_usdt = total_balance
 
         flash('Account created successfully!')
@@ -299,11 +299,20 @@ def delete_account(id):
 @app.route("/addexchange")
 @login_required
 def addexchange():
-    new_exchange = ExchangeModels(name="Kucoin Futures Sandbox", short="kucoinfutures")
+    new_exchange = ExchangeModels(name="Kucoin Spot", short="kucoin")
     db.session.add(new_exchange)
     db.session.commit()
     all_exchanges = ExchangeModels.query.all()
     return render_template("exchanges.html", exchanges=all_exchanges)
+
+@app.route("/transfer/main/futures")
+@login_required
+def transfer():
+    account = Accounts.query.get_or_404(4)
+    exchange_client = get_exchange_client(account)
+    # Transfer from main account to futures account
+    response = exchange_client.transfer('main', 'futures', 'USDT', 1)
+    return render_template("transfer.html", response=response)
 
 
 @app.route("/trades")
@@ -340,15 +349,6 @@ def get_total_account_balance(account_id):
     """
     account = Accounts.query.filter_by(id=account_id).first()
     exchange_client = get_exchange_client(account)
-
-    if exchange_client is not None:
-
-        # Load markets
-        try:
-            markets = exchange_client.load_markets()
-            print(markets)
-        except Exception as e:
-            return f'Error loading markets: {e}'
     # Load balance
     account.balance_total = exchange_client.get_total_balance()
     db.session.commit()
@@ -361,7 +361,6 @@ def get_usdt_account_balance(account_id):
     GET USDT PORTFOLIO VALUE OF ACCOUNT
     """
     account = Accounts.query.filter_by(id=account_id).first()
-
     exchange_client = get_exchange_client(account)
     # Load balance
     account.balance_usdt = exchange_client.get_usdt_balance()
@@ -419,9 +418,12 @@ def calculate_order_quantity(exchange_client, symbol, order_amount_percentage, p
     Returns:
         float: The order quantity.
     """
+
     symbol_info = exchange_client.load_markets()[symbol]
 
     # Check if symbol is inverted in the exchange
+    print(symbol)
+    print(symbol_info)
     if 'inverted' in symbol_info:
         symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
 
@@ -972,6 +974,7 @@ def load_balance():
     data = request.get_json()
     account_id = data['account_id']
     total_balance = get_total_account_balance(account_id)
+    print(total_balance)
     usdt_balance = get_usdt_account_balance(account_id)
     # Return the available pairs as a JSON response
     return jsonify({'total_balance': total_balance, 'usdt_balance': usdt_balance})
@@ -993,9 +996,6 @@ def tradingview_webhook():
         exchange_client = get_exchange_client(bot.accounts)
         if not exchange_client:
             return jsonify({'error': 'Invalid bot configuration'}), 400
-        position = get_position(bot.id)
-        if not position:
-            return jsonify({'error': f'Position for bot "{bot.name}" not found'}), 404
 
         # ENTER LONG TRADE AND CREATE POSITION
         if signal.startswith('ENTER-LONG'):
@@ -1004,8 +1004,8 @@ def tradingview_webhook():
                 price = bot.price
             else:
                 price = None
-
-            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'long', bot.order_type,
+            print("before calculate order ")
+            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.base_order_size, 'long', bot.order_type,
                                                 price)
             order = create_long_order(exchange_client, bot, quantity, price)
 
@@ -1048,7 +1048,7 @@ def tradingview_webhook():
                 price = bot.price
             else:
                 price = None
-            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.order_amount, 'short', bot.order_type,
+            quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.base_order_size, 'short', bot.order_type,
                                                 price)
             order = create_short_order(exchange_client, bot, quantity, price)
             if not order:
@@ -1087,10 +1087,4 @@ def tradingview_webhook():
 
 
 if __name__ == '__main__':
-    # app.app_context().push()
-    # db.drop_all()
-    # with app.app_context():
-    # db.create_all()
-
-    # Accounts.__table__.columns.user_id.unique = False
     app.run(debug=True)

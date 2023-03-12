@@ -79,7 +79,7 @@
                               class="flex items-center h-11 py-3 px-6 bg-gray-600"
                             >
                               <span class="text-xs text-gray-300 font-semibold"
-                                >Available USDT</span
+                                >Available Balance</span
                               >
                             </div>
                           </th>
@@ -259,8 +259,8 @@ function reloadAccount(account_id) {
   .then(response => response.json())
   .then(data => {
     // Update the table with the new balance
-    document.querySelector(`#total-${account_id}`).textContent = data.total_balance;
-    document.querySelector(`#usdt-${account_id}`).textContent = data.usdt_balance;
+    document.querySelector(`#total-${account_id}`).textContent = data.total_balance.toString()+' USDT';
+    document.querySelector(`#usdt-${account_id}`).textContent = data.usdt_balance.toString()+' USDT';
   })
   .catch(error => console.error(error));
 }
