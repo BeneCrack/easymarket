@@ -339,10 +339,17 @@ def get_total_account_balance(account_id):
     GET TOTAL PORTFOLIO VALUE OF ACCOUNT
     """
     account = Accounts.query.filter_by(id=account_id).first()
-    print(account)
-    exchange_client = Exchange(account)
+    exchange_client = get_exchange_client(account)
+
+    if exchange_client is not None:
+
+        # Load markets
+        try:
+            markets = exchange_client.load_markets()
+            print(markets)
+        except Exception as e:
+            return f'Error loading markets: {e}'
     # Load balance
-    print(exchange_client)
     account.balance_total = exchange_client.get_total_balance()
     db.session.commit()
     # Return the available pairs as a JSON response

@@ -8,36 +8,26 @@ class Exchange(ccxt.Exchange):
     markets = {}
     instances = {}
 
-    def __new__(cls, account):
-        """
-        Creates a new instance of the Exchange class if it does not exist, otherwise returns an existing instance.
-        """
-        id = account.id
-
-        if not cls.instances:
-            cls.instances[id] = super().__new__(cls)
-        elif id not in cls.instances:
-            cls.instances[id] = super().__new__(cls)
-        return cls.instances[id]
-
     def __init__(self, account):
-        print(account.exchangemodels.short)
-        print(account.id)
-        print(account.api_key)
         self.account_id = account.id
         exchange_name = account.exchangemodels.short
         self.api_key = account.api_key
         self.secret = account.api_secret
         self.passphrase = account.password
-        self.testnet = account.testnet
-        # if self.account_id not in self.instances:
+        self.testnet = bool(account.testnet)
+        self.urls = {}  # initialize urls to an empty dictionary
         exchange_options = self.build_exchange_options()
 
-        exchange_class = getattr(ccxt, exchange_name)
-        self.exchange_instance = exchange_class(exchange_options)
-        self.urls = self.exchange_instance.urls
-        self.set_sandbox_mode(self.testnet)
-        self.load_markets()
+        if account.id not in Exchange.instances:
+            exchange_class = getattr(ccxt, exchange_name)
+            exchange_instance = exchange_class(exchange_options)
+            self.urls = exchange_instance.urls
+            self.set_sandbox_mode(self.testnet)
+            self.exchange_instance = exchange_instance
+            self.load_markets()
+            Exchange.instances[account.id] = self.exchange_instance
+        else:
+            self.exchange_instance = Exchange.instances[account.id]
 
     """
     def get_exchange_class(self):
@@ -629,7 +619,7 @@ class Exchange(ccxt.Exchange):
             'secret': api_secret,
             'password': password,
             'enableRateLimit': True,
-            'options': {'adjustForTimeDifference': True},
+            'options': {'adjustForTimeDifference': True, 'defaultType': 'future'},
         }
 
         return exchange_options
