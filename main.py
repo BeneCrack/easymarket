@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
+from config import Config
 from flask import Markup, flash, request, Flask, render_template, redirect, url_for, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, UserMixin, current_user
 from flask_security import Security, SQLAlchemyUserDatastore, UserMixin, RoleMixin, login_required
@@ -309,9 +310,9 @@ def addexchange():
 @login_required
 def transfer():
     account = Accounts.query.get_or_404(4)
-    exchange_client = get_exchange_client(account)
+    exchange = get_exchange_client(account)
     # Transfer from main account to futures account
-    response = exchange_client.transfer('main', 'futures', 'USDT', 1)
+    response = exchange.exchange_instance.transfer('main', 'futures', 'USDT', 1)
     return render_template("transfer.html", response=response)
 
 
@@ -422,60 +423,66 @@ def calculate_order_quantity(exchange_client, symbol, order_amount_percentage, p
     symbol_info = exchange_client.load_markets()[symbol]
 
     # Check if symbol is inverted in the exchange
-    print(symbol)
-    print(symbol_info)
     if 'inverted' in symbol_info:
         symbol = f"{symbol.split('/')[1]}/{symbol.split('/')[0]}"
 
-    balance = exchange_client.fetch_balance()['total']
+    balance = exchange_client.get_usdt_balance()
+    print(balance)
     quote_currency = symbol_info['quote']
     quantity_precision = symbol_info['precision']['amount']
 
     # Retrieve the available balance in the quote currency
-    if quote_currency in balance:
-        available_balance = balance[quote_currency]['free']
-    else:
+    #if quote_currency in balance:
+        #available_balance = balance[quote_currency]['free']
+    #else:
         # Fetch balance for the quote currency from the symbol
-        available_balance = exchange_client.fetch_balance({'type': 'trading', 'currency': quote_currency})['free']
+        #available_balance = exchange_client.fetch_balance({'type': 'futures', 'currency': quote_currency})['free']
 
     # Calculate the order amount based on the bot's configured percentage of the available balance
-    amount = float(available_balance) * (order_amount_percentage / 100.0)
-
-    if order_type == 'market':
+    amount = float(balance) * (order_amount_percentage / 100.0)
+    print(amount)
+    print(symbol_info)
+    ordertype = order_type.lower()
+    quantity = amount
+    if ordertype == 'market':
         # For market orders, we calculate the quantity based on the order amount
-        min_notional = symbol_info['limits']['cost']['min']
-        quantity = max(exchange_client.amount_to_precision(symbol, amount / min_notional),
+        quantity = max(exchange_client.amount_to_precision(symbol, amount),
                        symbol_info['limits']['amount']['min'])
-    elif order_type == 'limit':
+    elif ordertype == 'limit':
+        print("write limit lorder execution")
         # For limit orders, we calculate the quantity based on the order amount and price
-        min_cost = symbol_info['limits']['cost']['min']
-        quantity = max(exchange_client.amount_to_precision(symbol, amount / price),
-                       symbol_info['limits']['amount']['min'])
-        quantity = exchange_client.price_to_precision(symbol, quantity * price)
-        quantity = max(quantity, exchange_client.amount_to_precision(symbol, min_cost / price))
+        #min_cost = symbol_info['limits']['cost']['min']
+        #quantity = max(exchange_client.amount_to_precision(symbol, amount / price),
+                       #symbol_info['limits']['amount']['min'])
+        #quantity = exchange_client.price_to_precision(symbol, quantity * price)
+        #quantity = max(quantity, exchange_client.amount_to_precision(symbol, min_cost / price))
     else:
-        raise ValueError(f'Invalid order type: {order_type}')
-
+        raise ValueError(f'Invalid order type: {ordertype}')
+    print(quantity)
+    print(position_type)
+    """
     if position_type == 'long':
         # For long positions, we buy the base currency and sell the quote currency
-        if order_type == 'limit':
+        if ordertype == 'limit':
             quantity = calculate_long_limit_order_quantity(exchange_client, symbol, price, quantity)
-        elif order_type == 'market':
+        elif ordertype == 'market':
             quantity = calculate_long_market_order_quantity(exchange_client, symbol, quantity)
         else:
-            raise ValueError(f'Invalid order type: {order_type}')
+            raise ValueError(f'Invalid order type: {ordertype}')
     elif position_type == 'short':
         # For short positions, we sell the base currency and buy the quote currency
-        if order_type == 'limit':
+        if ordertype == 'limit':
             quantity = calculate_short_limit_order_quantity(exchange_client, symbol, price, quantity)
-        elif order_type == 'market':
+        elif ordertype == 'market':
             quantity = calculate_short_market_order_quantity(exchange_client, symbol, quantity)
         else:
-            raise ValueError(f'Invalid order type: {order_type}')
+            raise ValueError(f'Invalid order type: {ordertype}')
     else:
         raise ValueError(f'Invalid position type: {position_type}')
+        """
+    print(quantity)
 
-    return exchange_client.amount_to_precision(symbol, quantity)
+    return quantity
 
 
 def calculate_long_limit_order_quantity(exchange_client, symbol, price, quantity):
@@ -577,10 +584,15 @@ def calculate_long_market_order_quantity(exchange_client, symbol, quantity):
         float: The order quantity.
     """
     # Check the minimum notional value
+    print("entered calculate_long_market_order_quantity function")
     symbol_info = exchange_client.load_markets()[symbol]
-    min_notional = symbol_info['limits']['cost']['min']
-    notional = quantity * symbol_info['last']
-    if notional < min_notional:
+    print(symbol_info)
+    ask_price = exchange_client.fetch_ticker(symbol)
+    print(ask_price)
+    min_notional = symbol_info['limits']['cost']['min'] if symbol_info['limits']['cost'] else None
+
+    print(min_notional)
+    if min_notional and quantity * ask_price < min_notional:
         raise ValueError(
             f'Order quantity {quantity} is too low for symbol {symbol}. Minimum notional value is {min_notional}')
 
@@ -601,9 +613,10 @@ def calculate_short_market_order_quantity(exchange_client, symbol, quantity):
     """
     # Check the minimum notional value
     symbol_info = exchange_client.load_markets()[symbol]
-    min_notional = symbol_info['limits']['cost']['min']
-    notional = quantity * symbol_info['last']
-    if notional < min_notional:
+    bid_price = exchange_client.fetch_ticker(symbol)['bid']
+    min_notional = symbol_info['limits']['cost']['min'] if symbol_info['limits']['cost'] else None
+
+    if min_notional and quantity * bid_price < min_notional:
         raise ValueError(
             f'Order quantity {quantity} is too low for symbol {symbol}. Minimum notional value is {min_notional}')
 
@@ -632,7 +645,7 @@ def check_inverted_symbol(exchange_client, symbol):
         return symbol
 
 
-def update_position(bot, order_id, position_side, quantity, price, timestamp, position_action=None) -> None:
+def update_position(bot, order_id, position_side, quantity, price, fees, dt, position_action):
     """
     Create or update a position based on the provided order details.
 
@@ -642,67 +655,56 @@ def update_position(bot, order_id, position_side, quantity, price, timestamp, po
         position_side (str): The side of the position ('long' or 'short').
         quantity (float): The quantity of the position.
         price (float): The price of the position.
-        timestamp (datetime): The timestamp of the position.
+        timestamp (dt): The timestamp of the position.
         position_action (str): The action being taken ('open' or 'close').
     """
-    positions = Positions().get_positions(bot.id)
-
+    print('update position function')
+    positions = Positions.query.filter_by(order_id=order_id).first()
+    print(position_side)
     # Check if there is already an existing position for the order
-    for position in positions:
-        if position.order_id == order_id:
-            # Update the existing position
-            if position_action == 'open':
-                raise ValueError(f'Position for order {order_id} already exists')
-            elif position_action == 'close':
-                if position.status != 'open':
-                    raise ValueError(f'Position for order {order_id} is not open')
-                position.status = 'closed'
-                position.exit_price = price
-                position.exit_time = timestamp
-                # Calculate fees
-                if position.order_type == 'limit':
-                    if position_side == 'long':
-                        fee_rate = bot.botfees.maker_fee
-                    else:
-                        fee_rate = bot.botfees.taker_fee
-                    fee = fee_rate * quantity * price
+    if positions is not None:
+        for position in positions:
+            if position.order_id == order_id:
+                # Update the existing position
+                if position_action == 'open':
+                    raise ValueError(f'Position for order {order_id} already exists')
+                elif position_action == 'close':
+                    if position.status != 'open':
+                        raise ValueError(f'Position for order {order_id} is not open')
+                    position.status = 'closed'
+                    position.exit_price = price
+                    position.exit_time = dt
+
+                    position.fees = position.fees + fees
                 else:
-                    if position_side == 'long':
-                        fee_rate = bot.botfees.taker_fee
-                    else:
-                        fee_rate = bot.botfees.maker_fee
-                    fee = fee_rate * quantity
-                position.fees = fee
-            else:
-                raise ValueError(f'Invalid position action: {position_action}')
-            position.save()
-            return
+                    raise ValueError(f'Invalid position action: {position_side}')
+                position.save()
+                return
 
     # Create a new position
+    print("bot")
+    print(bot)
     if position_action == 'open':
+        # Convert to datetime object
+        datetime_obj = datetime.strptime(dt, '%Y-%m-%dT%H:%M:%S.%fZ')
         position_type = 'long' if position_side == 'long' else 'short'
-        position = Positions(bot_id=bot.id, symbol=bot.symbol, exchange_id=bot.exchange.id, entry_price=price,
-                             entry_time=timestamp, order_id=order_id, order_quantity=quantity,
-                             order_type=bot.order_type, position_type=position_type, status='open', user_id=bot.user_id)
-        # Calculate fees
-        if bot.order_type == 'limit':
-            if position_side == 'long':
-                fee_rate = bot.botfees.maker_fee
-            else:
-                fee_rate = bot.botfees.taker_fee
-            fee = fee_rate * quantity * price
-        else:
-            if position_side == 'long':
-                fee_rate = bot.botfees.taker_fee
-            else:
-                fee_rate = bot.botfees.maker_fee
-            fee = fee_rate * quantity
-        position.fees = fee
+        print(bot.id)
+        print(bot.symbol)
+        print(bot.accounts.exchangemodels.id)
+        print(price)
+        print(order_id)
+        print(quantity)
+        print(bot.order_type)
+        print(fees)
+        position = Positions(bot_id=bot.id, symbol=bot.symbol, exchange_id=bot.accounts.exchangemodels.id, entry_price=price,
+                             entry_time=datetime_obj, order_id=order_id, order_quantity=quantity,
+                             order_type=bot.order_type, position_type=position_type, fees=fees, status='open', user_id=bot.user_id)
+
         position.save()
-    elif position_action == 'close':
+    elif position_side == 'close':
         raise ValueError(f'Position for order {order_id} not found')
     else:
-        raise ValueError(f'Invalid position action: {position_action}')
+        raise ValueError(f'Invalid position action: {position_side}')
 
 
 async def create_long_order(exchange_client, bot, quantity, price=None):
@@ -728,25 +730,27 @@ async def create_long_order(exchange_client, bot, quantity, price=None):
 
     # Check if symbol is reversed in the exchange
     symbol = check_inverted_symbol(exchange_client, symbol)
+    print(quantity)
 
     # Create the order
-    if order_type == 'LIMIT':
-        order = exchange_client.create_limit_buy_order(symbol, quantity, price)
-    else:
-        order = exchange_client.create_market_buy_order(symbol, quantity)
-
-    # Wait for limit order to be filled
     if order_type == 'limit':
-        while True:
-            order = exchange_client.fetch_order(order['id'], symbol)
-            if order['status'] == 'filled':
-                break
-            await asyncio.sleep(5)
+        order = exchange_client.create_limit_order(symbol, 'buy', quantity, price)
+    else:
+        order = exchange_client.create_market_order(symbol, 'buy', quantity)
+    # Wait for the order to be filled
+    while True:
+        print(order['id'])
+        order = exchange_client.get_order_status(symbol, order['id'])
+        if order['filled'] == order['amount']:
+            break
+        await asyncio.sleep(5)
 
     # Create or update the position
-    update_position(bot.id, order['id'], position_type, quantity, order['price'], datetime.now())
+    print("before update function")
+    update_position(bot, order['id'], position_type, order['amount'], order['price'], 0.06, order['datetime'], 'open')
 
     return order
+
 
 
 async def create_short_order(exchange_client, bot, quantity, price=None):
@@ -770,7 +774,7 @@ async def create_short_order(exchange_client, bot, quantity, price=None):
     symbol = check_inverted_symbol(exchange_client, symbol)
 
     # Create the order
-    if order_type == 'LIMIT':
+    if order_type == 'limit':
         order = exchange_client.create_limit_sell_order(symbol, quantity, price)
     else:
         order = exchange_client.create_market_sell_order(symbol, quantity)
@@ -812,7 +816,7 @@ async def create_long_exit_order(exchange_client, bot, quantity, price=None):
     position_type = 'long'
 
     order_type = bot.order_type
-    if order_type == 'MARKET':
+    if order_type == 'market':
         order = exchange_client.create_market_sell_order(symbol, quantity)
     else:
         if not price:
@@ -859,7 +863,7 @@ async def create_short_exit_order(exchange_client, bot, quantity, price=None):
     position_type = 'short'
 
     order_type = bot.order_type
-    if order_type == 'MARKET':
+    if order_type == 'market':
         order = exchange_client.create_market_buy_order(symbol, quantity)
     else:
         if not price:
@@ -985,14 +989,16 @@ def load_balance():
 #################################################################################
 
 @app.route('/webhook/tradingview', methods=['POST'])
-def tradingview_webhook():
+async def tradingview_webhook():
     try:
         data = json.loads(request.data)
         signal = data['message']
         bot = get_bot_by_id(signal.split('_')[-1])
+        print(signal.split('_')[-1])
         if not bot:
             return jsonify({'error': f'Bot "{bot.name}" not found'}), 404
 
+        print(bot.accounts)
         exchange_client = get_exchange_client(bot.accounts)
         if not exchange_client:
             return jsonify({'error': 'Invalid bot configuration'}), 400
@@ -1000,21 +1006,17 @@ def tradingview_webhook():
         # ENTER LONG TRADE AND CREATE POSITION
         if signal.startswith('ENTER-LONG'):
             order_type = bot.order_type
-            if order_type == 'LIMIT':
+            if order_type == 'limit':
                 price = bot.price
             else:
                 price = None
             print("before calculate order ")
             quantity = calculate_order_quantity(exchange_client, bot.symbol, bot.base_order_size, 'long', bot.order_type,
                                                 price)
-            order = create_long_order(exchange_client, bot, quantity, price)
+            order = await create_long_order(exchange_client, bot, quantity, price)
 
             if not order:
                 return jsonify({'error': 'Unable to create order'}), 500
-            stop_loss = bot.stop_loss
-            take_profit = bot.take_profit
-
-            update_position(bot, order['orderId'], 'long', quantity, order['price'], datetime.now(), 'open')
             return jsonify({'message': 'Long position created successfully'}), 200
 
         # EXIT LONG TRADE AND UPDATE POSITION
@@ -1028,7 +1030,7 @@ def tradingview_webhook():
             if order['status'] == 'FILLED':
                 order_type = bot.order_type
                 side = 'SELL'
-                if order_type == 'LIMIT':
+                if order_type == 'limit':
                     price = float(order['price'])
                     quantity = position.order_quantity
                 else:
@@ -1044,7 +1046,7 @@ def tradingview_webhook():
         elif signal.startswith('ENTER-SHORT'):
             order_type = bot.order_type
             side = 'SELL'
-            if order_type == 'LIMIT':
+            if order_type == 'limit':
                 price = bot.price
             else:
                 price = None
@@ -1069,7 +1071,7 @@ def tradingview_webhook():
             if order['status'] == 'FILLED':
                 order_type = bot.order_type
                 side = 'BUY'
-                if order_type == 'LIMIT':
+                if order_type == 'limit':
                     price = float(order['price'])
                     quantity = position.order_quantity
                 else:

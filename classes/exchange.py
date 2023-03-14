@@ -26,7 +26,7 @@ class Exchange(ccxt.Exchange):
 
         exchange = getattr(ccxt, self.exchange_name)(self.build_exchange_options())
         exchange.set_sandbox_mode(self.testnet)
-        #print(exchange.fetch_balance()['total']['USDT'])
+        # print(exchange.fetch_balance()['total']['USDT'])
         Exchange.instances[self.account_id] = exchange
         return exchange
 
@@ -44,9 +44,6 @@ class Exchange(ccxt.Exchange):
         }
         return exchange_options
 
-    #def transfer(self, symbol):
-
-
     def get_trading_fees(self, symbol):
         try:
             fees = self.exchange_instance.fetch_trading_fees(symbol)
@@ -59,17 +56,13 @@ class Exchange(ccxt.Exchange):
 
     def get_available_leverage(self, symbol):
         # Check if testnet is supported for the exchange
-        print("we here2")
         if self.testnet:
             if hasattr(self.exchange_instance, 'fetch_markets'):
                 # Load markets information for the testnet exchange
                 markets = self.exchange_instance.fetch_markets()
                 market = next((m for m in markets if m['symbol'] == symbol), None)
                 if market:
-                    print(market)
-                    print("market")
                     max_leverage = int(market['limits']['leverage']['max'])
-                    print(max_leverage)
                     return ['{}x'.format(i) for i in [1, 3, 5, 10, 15, 20, 30, 40, 50, 60, 100, 150, 200] if
                             i <= max_leverage]
             # Testnet not supported for this exchange, return None
@@ -96,8 +89,6 @@ class Exchange(ccxt.Exchange):
         timeframes = None
         try:
             self.exchange_instance.load_markets()
-
-            # timeframes = [tf for tf in self.exchange_instance.timeframes.keys() if market['quote'] in tf]
         except ccxt.ExchangeError as e:
             print(f"Error loading timeframes for {self.exchange_name}: {e}")
         return self.exchange_instance.timeframes.keys()
@@ -144,7 +135,7 @@ class Exchange(ccxt.Exchange):
             print(f"Failed to create limit order: {e}")
         return order
 
-    def create_market_order(self, symbol, side, amount, params={}):
+    def create_market_order(self, symbol, side, amount):
         order = None
         try:
             order = self.exchange_instance.create_order(symbol, 'market', side, amount)
@@ -166,13 +157,12 @@ class Exchange(ccxt.Exchange):
         return exchange_order
 
     def get_order_status(self, symbol, order_id):
-        status = None
         try:
             exchange_order = self.exchange_instance.fetch_order(order_id, symbol=symbol)
-            status = exchange_order['status'] if exchange_order else None
+            print(exchange_order)
         except Exception as e:
             print(f"Error getting order status on {self.exchange_name}: {e}")
-        return status
+        return exchange_order
 
     def create_order(self, side, order_type, symbol, amount, price=None):
         try:
